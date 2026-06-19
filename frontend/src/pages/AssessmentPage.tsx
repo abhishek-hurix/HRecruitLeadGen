@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, Loader2, Clock, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Send, Loader2, Clock, ArrowRight, ArrowLeft, AlertCircle } from 'lucide-react';
 import { useAssessmentToken } from '../hooks/useAssessmentToken';
 import { useTimer } from '../hooks/useTimer';
 import { isMobilePhone } from '../utils/device';
@@ -26,16 +26,23 @@ export function AssessmentPage() {
   const [error, setError] = useState('');
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const hasAutoSubmittedRef = useRef(false);
+  const hasSeenActiveTimerRef = useRef(false);
   const isMobile = isMobilePhone();
 
   const handleExpire = useCallback(() => {
     setError('Time is up! Your assessment session has expired.');
   }, []);
 
-  const { formatted, isLow, isExpired } = useTimer(session?.expiresAt || null, handleExpire);
+  const { timeLeft, formatted, isLow, isExpired } = useTimer(session?.expiresAt || null, handleExpire);
 
   useEffect(() => {
-    if (!isExpired || !session || hasAutoSubmittedRef.current) return;
+    if (timeLeft !== null && timeLeft > 0) {
+      hasSeenActiveTimerRef.current = true;
+    }
+  }, [timeLeft]);
+
+  useEffect(() => {
+    if (!isExpired || !session || hasAutoSubmittedRef.current || !hasSeenActiveTimerRef.current) return;
 
     hasAutoSubmittedRef.current = true;
     setSubmitting(true);
@@ -191,6 +198,29 @@ export function AssessmentPage() {
   }
 
   if (!session || !currentQuestion) return null;
+
+  if (isExpired && !hasSeenActiveTimerRef.current) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-hurix-light p-4">
+        <div className="card-premium max-w-lg text-center">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
+            <AlertCircle className="text-amber-600" size={34} />
+          </div>
+          <h1 className="mb-3 text-2xl font-bold text-hurix-charcoal">Assessment Session Expired</h1>
+          <p className="mb-8 text-hurix-gray">
+            This assessment session is no longer active. Please login again or request a fresh assessment link to continue.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/login')}
+            className="btn-primary px-8"
+          >
+            Login Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const getQuestionButtonClass = (questionId: string, index: number) => {
     const isActive = index === currentIndex;

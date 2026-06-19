@@ -49,6 +49,10 @@ export function JobRoleSelectionPage() {
       await selectRoleAndStart(roleId);
       navigate(`/assessment?token=${encodeURIComponent(token)}`);
     } catch (err) {
+      if (isLinkExpiredError(err)) {
+        navigate('/expired');
+        return;
+      }
       setError(getApiErrorMessage(err, 'Failed to start assessment.'));
       setStartingId(null);
     }
