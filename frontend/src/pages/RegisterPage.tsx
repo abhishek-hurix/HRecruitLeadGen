@@ -24,7 +24,6 @@ export function RegisterPage() {
     fullName: '',
     email: prefilledEmail,
     linkedinUrl: '',
-    appliedRole: '',
     referralCode: '',
     password: '',
     confirmPassword: '',
@@ -44,7 +43,6 @@ export function RegisterPage() {
     }
     if (!form.experienceCategory) e.experienceCategory = 'Years of experience is required';
     if (!isValidLinkedIn(form.linkedinUrl)) e.linkedinUrl = 'Valid LinkedIn URL required';
-    if (form.appliedRole.trim().length < 2) e.appliedRole = 'Role / tech stack is required';
     if (!resume) e.resume = 'Resume PDF is required';
     else if (!isPdfFile(resume)) e.resume = 'Only PDF files allowed';
     else if (resume.size > 5 * 1024 * 1024) e.resume = 'Max file size is 5MB';
@@ -69,7 +67,6 @@ export function RegisterPage() {
       fd.append('phoneNumber', phoneNumber.replace(/\D/g, ''));
       fd.append('experienceCategory', form.experienceCategory);
       fd.append('linkedinUrl', form.linkedinUrl);
-      fd.append('appliedRole', form.appliedRole);
       fd.append('password', form.password);
       if (form.referralCode) fd.append('referralCode', form.referralCode);
       fd.append('visitorId', getVisitorId());
@@ -159,23 +156,6 @@ export function RegisterPage() {
                 placeholder="https://linkedin.com/in/johndoe"
               />
               {errors.linkedinUrl && <p className="text-red-500 text-xs mt-1">{errors.linkedinUrl}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Role / Tech Stack *</label>
-              <input
-                className="input-field"
-                value={form.appliedRole}
-                onChange={(e) => setForm({ ...form, appliedRole: e.target.value })}
-                placeholder="Python, Node JS, Fullstack AI Developer..."
-                list="role-options"
-              />
-              <datalist id="role-options">
-                <option value="Python" />
-                <option value="Node JS" />
-                <option value="Fullstack AI Developer" />
-              </datalist>
-              {errors.appliedRole && <p className="text-red-500 text-xs mt-1">{errors.appliedRole}</p>}
             </div>
 
             <div>

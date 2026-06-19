@@ -2,11 +2,20 @@ import { Link } from 'react-router-dom';
 
 interface HeaderProps {
   showNav?: boolean;
+  variant?: 'default' | 'ambient';
 }
 
-export function Header({ showNav = true }: HeaderProps) {
+export function Header({ showNav = true, variant = 'default' }: HeaderProps) {
+  const isAmbient = variant === 'ambient';
+
   return (
-    <header className="border-b border-slate-100 bg-white sticky top-0 z-50">
+    <header
+      className={`sticky top-0 z-50 border-b ${
+        isAmbient
+          ? 'border-white/30 bg-white/35 backdrop-blur-xl'
+          : 'border-slate-100 bg-white'
+      }`}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-3">
           <img src="/hurix-logo.png" alt="Hurix Digital" className="h-10 sm:h-12" />

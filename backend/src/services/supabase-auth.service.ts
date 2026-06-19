@@ -1,6 +1,10 @@
 import { createClient, type User as SupabaseUser } from '@supabase/supabase-js';
+import type { WebSocketLikeConstructor } from '@supabase/realtime-js';
+import WebSocket from 'ws';
 import { config } from '../config';
 import { AppError } from '../utils/errors';
+
+const websocketTransport = WebSocket as unknown as WebSocketLikeConstructor;
 
 export class SupabaseAuthService {
   private get publicClient() {
@@ -10,6 +14,7 @@ export class SupabaseAuthService {
 
     return createClient(config.supabase.url, config.supabase.anonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
+      realtime: { transport: websocketTransport },
     });
   }
 
@@ -20,6 +25,7 @@ export class SupabaseAuthService {
 
     return createClient(config.supabase.url, config.supabase.serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
+      realtime: { transport: websocketTransport },
     });
   }
 

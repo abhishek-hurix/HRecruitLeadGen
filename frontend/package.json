@@ -18,6 +18,7 @@
     "@tanstack/react-query": "^5.59.20",
     "axios": "^1.7.7",
     "libphonenumber-js": "^1.13.6",
+    "lottie-react": "^2.4.1",
     "lucide-react": "^0.454.0",
     "pyodide": "^0.26.4",
     "react": "^18.3.1",

@@ -12,13 +12,15 @@ import { getExperienceYears, parseExperienceCategory } from '../utils/experience
 import { logger } from '../utils/logger';
 import { supabaseAuthService } from './supabase-auth.service';
 
+const DEFAULT_APPLIED_ROLE = 'General Application';
+
 export interface RegistrationData {
   fullName: string;
   email: string;
   phoneCountryIso: string;
   phoneNumber: string;
   linkedinUrl: string;
-  appliedRole: string;
+  appliedRole?: string;
   referralCode?: string;
   password: string;
   visitorId?: string;
@@ -44,20 +46,18 @@ export class RegistrationService {
     if (data.fullName.trim().length < 2) {
       throw new AppError(400, 'Full name is required');
     }
-    if (!data.appliedRole || data.appliedRole.trim().length < 2) {
-      throw new AppError(400, 'Applied role is required');
-    }
     if (!data.password || data.password.length < 8) {
       throw new AppError(400, 'Password must be at least 8 characters');
     }
 
     const email = data.email.toLowerCase();
+    const appliedRole = data.appliedRole?.trim() || DEFAULT_APPLIED_ROLE;
 
     const existingUser = await prisma.user.findUnique({
       where: { email },
       include: { candidateProfiles: true },
     });
-    if (existingUser?.candidateProfiles.some((profile) => profile.appliedRole.toLowerCase() === data.appliedRole.trim().toLowerCase())) {
+    if (existingUser?.candidateProfiles.some((profile) => profile.appliedRole.toLowerCase() === appliedRole.toLowerCase())) {
       throw new AppError(409, 'An application with this email and role already exists.');
     }
 
@@ -109,7 +109,7 @@ export class RegistrationService {
         yearsOfExperience: getExperienceYears(experienceCategory),
         linkedinUrl: data.linkedinUrl.trim(),
         resumePath,
-        appliedRole: data.appliedRole.trim(),
+        appliedRole,
         referralCode: data.referralCode || null,
       };
 

@@ -9,6 +9,7 @@ import { emailService } from './services/email.service';
 
 export function createApp() {
   const app = express();
+  app.set('trust proxy', 1);
 
   app.use(helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },

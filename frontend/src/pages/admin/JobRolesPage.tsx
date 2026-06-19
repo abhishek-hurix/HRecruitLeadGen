@@ -293,13 +293,15 @@ export function JobRolesPage() {
           {(data?.data || []).map((role: Record<string, unknown>) => {
             const analytics = role.analytics as Record<string, unknown> | undefined;
             const needsQuestions = Number(role.activeQuestionCount || 0) === 0;
+            const roleStatus = role.status as string;
+            const effectiveStatus = roleStatus === 'ACTIVE' && needsQuestions ? 'INACTIVE' : roleStatus;
             return (
               <div key={role.id as string} className="card-premium">
                 <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-3 mb-2">
                       <h2 className="text-xl font-bold text-hurix-charcoal">{role.title as string}</h2>
-                      {statusBadge(role.status as string)}
+                      {statusBadge(effectiveStatus)}
                     </div>
                     {needsQuestions && (
                       <div className="mb-3 flex items-center gap-1.5 text-xs font-medium text-black">
@@ -352,12 +354,12 @@ export function JobRolesPage() {
                       <button onClick={() => openEdit(role)} className="btn-secondary text-sm flex items-center gap-1 px-3 py-2">
                         <Pencil size={14} /> Edit
                       </button>
-                      {role.status !== 'ACTIVE' && (
+                      {effectiveStatus !== 'ACTIVE' && !needsQuestions && (
                         <button onClick={() => setJobRoleStatus(role.id as string, 'ACTIVE').then(() => queryClient.invalidateQueries({ queryKey: ['job-roles'] }))} className="btn-secondary text-sm flex items-center gap-1 px-3 py-2">
                           <CheckCircle size={14} /> Activate
                         </button>
                       )}
-                      {role.status === 'ACTIVE' && (
+                      {effectiveStatus === 'ACTIVE' && (
                         <button onClick={() => setJobRoleStatus(role.id as string, 'INACTIVE').then(() => queryClient.invalidateQueries({ queryKey: ['job-roles'] }))} className="btn-secondary text-sm flex items-center gap-1 px-3 py-2">
                           <XCircle size={14} /> Deactivate
                         </button>
