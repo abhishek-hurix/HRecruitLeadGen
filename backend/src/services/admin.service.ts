@@ -146,12 +146,16 @@ export class AdminService {
     }
 
     if (params.role && params.role !== 'all') {
-      const isUuid = /^[0-9a-f-]{36}$/i.test(params.role);
-      if (isUuid) {
-        where.selectedRoleId = params.role;
-      } else {
-        where.appliedRole = { equals: params.role, mode: 'insensitive' };
-      }
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : []),
+        {
+          OR: [
+            { selectedRoleId: params.role },
+            { assessments: { some: { jobRoleId: params.role } } },
+            { submissions: { some: { assessment: { jobRoleId: params.role } } } },
+          ],
+        },
+      ];
     }
 
     if (typeof params.minScore === 'number' && Number.isFinite(params.minScore)) {
@@ -176,15 +180,22 @@ export class AdminService {
         include: {
           user: true,
           assessmentTokens: { orderBy: { createdAt: 'desc' }, take: 1 },
-          assessments: { orderBy: { createdAt: 'desc' }, take: 1 },
-          submissions: { orderBy: { submittedAt: 'desc' }, take: 1 },
+          assessments: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            include: { jobRole: { select: { id: true, title: true } } },
+          },
+          submissions: {
+            orderBy: { submittedAt: 'desc' },
+            take: 1,
+            include: { assessment: { include: { jobRole: { select: { id: true, title: true } } } } },
+          },
         },
       }),
       prisma.candidateProfile.count({ where }),
-      prisma.candidateProfile.findMany({
-        distinct: ['appliedRole'],
-        select: { appliedRole: true },
-        orderBy: { appliedRole: 'asc' },
+      prisma.jobRole.findMany({
+        select: { id: true, title: true },
+        orderBy: { title: 'asc' },
       }),
     ]);
 
@@ -198,6 +209,12 @@ export class AdminService {
         assessmentInProgress: c.assessments[0]?.status === AssessmentStatus.IN_PROGRESS,
       });
 
+      const displayRole =
+        c.submissions[0]?.assessment.jobRole?.title ||
+        c.assessments[0]?.jobRole?.title ||
+        c.selectedRoleName ||
+        null;
+
       return {
         id: c.id,
         applicationId: c.id.slice(0, 8).toUpperCase(),
@@ -208,7 +225,7 @@ export class AdminService {
         countryCode: c.countryCode,
         experienceLabel: getExperienceLabel(c.experienceCategory),
         linkedinUrl: c.linkedinUrl,
-        appliedRole: c.appliedRole || c.selectedRoleName,
+        appliedRole: displayRole,
         referralCode: c.referralCode,
         emailVerified: c.emailVerified,
         journeyStatus,
@@ -229,8 +246,8 @@ export class AdminService {
     return {
       data: mapped,
       roleFilters: roleRows
-        .map((row) => row.appliedRole)
-        .filter((role): role is string => Boolean(role && role.trim())),
+        .map((role) => role.title)
+        .filter((role) => Boolean(role.trim())),
       pagination: { page, limit, total: params.status ? mapped.length : total, totalPages: Math.ceil((params.status ? mapped.length : total) / limit) },
     };
   }
@@ -278,8 +295,16 @@ export class AdminService {
       include: {
         user: true,
         assessmentTokens: { orderBy: { createdAt: 'desc' }, take: 1 },
-        assessments: { orderBy: { createdAt: 'desc' }, take: 1 },
-        submissions: { orderBy: { submittedAt: 'desc' }, take: 1 },
+        assessments: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: { jobRole: { select: { id: true, title: true } } },
+        },
+        submissions: {
+          orderBy: { submittedAt: 'desc' },
+          take: 1,
+          include: { assessment: { include: { jobRole: { select: { id: true, title: true } } } } },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -295,6 +320,12 @@ export class AdminService {
         assessmentInProgress: c.assessments[0]?.status === AssessmentStatus.IN_PROGRESS,
       });
 
+      const displayRole =
+        c.submissions[0]?.assessment.jobRole?.title ||
+        c.assessments[0]?.jobRole?.title ||
+        c.selectedRoleName ||
+        '';
+
       return [
         c.fullName,
         c.user.email,
@@ -302,9 +333,9 @@ export class AdminService {
         c.phoneCountry || '',
         getExperienceLabel(c.experienceCategory),
         c.linkedinUrl,
-        c.appliedRole,
+        displayRole,
         c.referralCode || '',
-        c.selectedRoleName || '',
+        displayRole,
         c.selectedCountry || '',
         c.selectedCompensation || '',
         c.utmSource || '',

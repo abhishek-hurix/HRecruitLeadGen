@@ -6,7 +6,7 @@ import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
 import { loginWithPassword, loginWithGoogle, loginWithSupabase } from '../api/auth';
 import { getCandidateToken, setCandidateToken } from '../api/client';
-import { getApiErrorMessage } from '../utils/apiErrors';
+import { getApiErrorMessage, getApiErrorStatus } from '../utils/apiErrors';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 export function CandidateLoginPage() {
@@ -45,6 +45,9 @@ export function CandidateLoginPage() {
         await supabaseClient.auth.signOut();
         navigate('/portal/dashboard');
       } catch (err) {
+        await supabaseClient.auth.signOut();
+        const status = getApiErrorStatus(err);
+        if (status && [401, 403].includes(status)) return;
         setError(getApiErrorMessage(err, 'Supabase sign-in failed'));
       } finally {
         setLoading(false);

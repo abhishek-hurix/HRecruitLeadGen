@@ -113,13 +113,10 @@ export function CandidatesPage() {
     </div>
   );
 
-  const activeRoleFilters = (rolesData?.data || [])
-    .filter((jobRole) => jobRole.status === 'ACTIVE')
-    .map((jobRole) => ({ label: jobRole.title, value: jobRole.title }));
-  const candidateRoleFilters = (data?.roleFilters || []).map((roleName) => ({ label: roleName, value: roleName }));
-  const roleFilters = Array.from(
-    new Map([...activeRoleFilters, ...candidateRoleFilters].map((filter) => [filter.label.toLowerCase(), filter])).values(),
-  );
+  const roleFilters = (rolesData?.data || []).map((jobRole) => ({
+    label: jobRole.title,
+    value: jobRole.id,
+  }));
 
   return (
     <AdminLayout>
@@ -185,7 +182,7 @@ export function CandidatesPage() {
               </option>
             ))}
           </select>
-          <select className="input-field" value={role.startsWith('all') || roleFilters.some((filter) => filter.value === role) ? '' : role} onChange={(e) => { setRole(e.target.value || 'all'); setPage(1); }}>
+          <select className="input-field" value={roleFilters.some((filter) => filter.value === role) ? role : ''} onChange={(e) => { setRole(e.target.value || 'all'); setPage(1); }}>
             <option value="">All Job Roles</option>
             {(rolesData?.data || []).map((r) => (
               <option key={r.id} value={r.id}>{r.title}</option>
