@@ -14,13 +14,36 @@ Open inbound ports in the EC2 security group:
 - `22` for SSH
 - `80` for the web app
 
-Install Docker and Compose plugin:
+Install Docker and Compose plugin.
+
+For Ubuntu:
 
 ```bash
 sudo apt update
 sudo apt install -y docker.io docker-compose-plugin git
 sudo usermod -aG docker $USER
 newgrp docker
+```
+
+For Amazon Linux 2023:
+
+```bash
+sudo dnf update -y
+sudo dnf install -y docker git
+sudo systemctl enable --now docker
+sudo usermod -aG docker ec2-user
+
+sudo mkdir -p /usr/local/lib/docker/cli-plugins
+sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+sudo curl -SL https://github.com/docker/buildx/releases/download/v0.30.1/buildx-v0.30.1.linux-amd64 \
+  -o /usr/local/lib/docker/cli-plugins/docker-buildx
+sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+
+docker compose version
+docker buildx version
 ```
 
 ## 2. Configure Environment
@@ -39,6 +62,8 @@ Edit `.env`:
 - Set strong `POSTGRES_PASSWORD`, `JWT_ASSESSMENT_SECRET`, and `JWT_ADMIN_SECRET`.
 - Fill SMTP, Supabase, Google OAuth, and OpenAI values as required.
 - Keep `VITE_API_URL=/api` for same-server deployment.
+- Keep `INIT_DB_ON_START=true` on first deployment so Prisma seed creates the super admin,
+  referral codes, default questions, and default inactive job roles.
 
 Important: if `POSTGRES_PASSWORD` is changed, update `DATABASE_URL` with the same password.
 
@@ -74,7 +99,9 @@ git pull
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-The backend runs Prisma migrations automatically on container start.
+The backend runs Prisma migrations automatically on container start. With
+`INIT_DB_ON_START=true`, it also runs the idempotent seed script so a fresh EC2
+gets the super admin account and base question bank without manual commands.
 
 ## 5. Persistent Data
 

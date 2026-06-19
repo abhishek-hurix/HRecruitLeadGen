@@ -52,6 +52,7 @@ services:
       ASSESSMENT_DURATION_MINUTES: ${ASSESSMENT_DURATION_MINUTES:-60}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      INIT_DB_ON_START: ${INIT_DB_ON_START:-true}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -61,7 +62,8 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 90s
     networks:
       - hurix-network
 
