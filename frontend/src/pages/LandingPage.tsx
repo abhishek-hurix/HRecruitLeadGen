@@ -29,12 +29,6 @@ export function LandingPage() {
                   <Link to="/register" className="btn-primary px-8 py-4 text-base shadow-lg shadow-hurix-blue/20">
                   Apply Now
                 </Link>
-                  <Link to="/login" className="btn-secondary px-8 py-4 text-base shadow-sm">
-                  Candidate Login
-                </Link>
-                  <Link to="/admin/login" className="btn-secondary hidden px-6 py-4 text-base shadow-sm sm:inline-flex">
-                  Admin Login
-                </Link>
                 </div>
               </div>
 
