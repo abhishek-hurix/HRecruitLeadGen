@@ -1,8 +1,8 @@
 # Hurix Talent Assessment Platform
 
-Enterprise-grade technical hiring platform for **Hurix Digital**. Candidates register with international phone support and experience details, verify email, select a job role, complete a timed coding assessment, and track progress via a dedicated portal. Admins manage candidates, job roles, questions, and analytics through a secure RBAC-protected dashboard.
+Enterprise-grade technical hiring platform for **Hurix Digital**. Candidates register with international phone support and concrete experience details, verify email, select a job role, complete a timed role-based assessment, and track progress via a dedicated portal. Admins manage candidates, job roles, generated questions, and analytics through a secure RBAC-protected dashboard.
 
-**Repository:** [github.com/manishhurix/RecruitLeadGen](https://github.com/manishhurix/RecruitLeadGen)
+**Repository:** [github.com/abhishek-hurix/HRecruitLeadGen](https://github.com/abhishek-hurix/HRecruitLeadGen)
 
 ---
 
@@ -26,10 +26,11 @@ All screenshots are stored in the [`SS/`](./SS) folder.
 
 ### Candidate Registration
 - Full profile capture: name, email, LinkedIn URL, resume (PDF), referral code, password
-- **Years of Experience** — required dropdown (Fresher through 10+ Years)
+- **Years of Experience** — required dropdown (`Fresher`, `1 Year` through `10 Years`, `10+ Years`)
 - **International phone** — searchable country selector with flag, name, and dial code (default: **India +91**)
 - Phone stored as `countryCode`, `phoneNumber`, and E.164 `fullPhone` (e.g. `+919876543210`)
 - Per-country validation via `libphonenumber-js`
+- Role / tech stack input is intentionally hidden from the candidate registration form; backend stores `General Application` until the candidate selects a job role.
 
 ### Candidate Portal (`/login`, `/portal/dashboard`)
 - Email verification with assessment link (SMTP / mock mode)
@@ -41,10 +42,10 @@ All screenshots are stored in the [`SS/`](./SS) folder.
 - Mobile restriction for coding (desktop/tablet only)
 
 ### Assessment Engine
-- 10 random questions (Python or JavaScript) from 200-question bank
-- **Run Code** in browser (Pyodide + Web Worker) for instant feedback
-- **Submit** evaluated server-side against hidden test cases
-- 60-minute timed session, copy/paste disabled
+- 10-question timed assessment
+- Default duration: **10 minutes** (`ASSESSMENT_DURATION_MINUTES=10`)
+- MCQ assessment flow with answer tracking, review marking, next-question navigation, and final submit confirmation
+- Candidate-facing job roles only appear when active and backed by active generated questions
 
 ### Admin Portal (`/admin/*`)
 - **RBAC:** `SUPER_ADMIN` (full access) and `ADMIN` (view-only subset)
@@ -53,7 +54,8 @@ All screenshots are stored in the [`SS/`](./SS) folder.
 - **Call Candidate** — uses full international number (`tel:+919876543210`)
 - **Resume preview** — inline PDF preview modal on candidates list and detail
 - **AI assessment review** — generate AI-powered submission review (Super Admin)
-- **Job Role Management** — create, edit, activate/deactivate roles (Super Admin)
+- **Job Role Management** — create, edit, activate/deactivate roles and generate role-specific MCQ questions (Super Admin)
+- Question-less roles are shown as inactive in the admin UI until questions are generated
 - **Marketing Analytics** dashboard with UTM attribution (Super Admin)
 - **Candidates by Experience** analytics on Super Admin dashboard
 - Question bank management (Super Admin)
@@ -77,6 +79,7 @@ All screenshots are stored in the [`SS/`](./SS) folder.
 - Rate limiting on login, registration, and verification resend
 - bcrypt password hashing
 - Protected routes on frontend and backend
+- Production build includes crawler exclusions: `robots.txt` (`Disallow: /`) and `<meta name="robots" content="noindex, nofollow, noarchive">`
 
 ---
 
@@ -84,9 +87,9 @@ All screenshots are stored in the [`SS/`](./SS) folder.
 
 | Layer | Technologies |
 |-------|----------------|
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS, TanStack Query, Monaco Editor, Pyodide, libphonenumber-js |
-| Backend | Node.js, Express, TypeScript, Prisma, PostgreSQL, libphonenumber-js |
-| Auth | JWT, Google OAuth, bcrypt |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, TanStack Query, Lottie React, libphonenumber-js |
+| Backend | Node.js 20, Express, TypeScript, Prisma, PostgreSQL, libphonenumber-js |
+| Auth | JWT, Supabase Auth, Google OAuth, bcrypt |
 | Email | Nodemailer (SMTP) |
 | Testing | Vitest, Supertest, Playwright |
 | Infra | Docker Compose, Nginx (production) |
@@ -103,8 +106,8 @@ All screenshots are stored in the [`SS/`](./SS) folder.
 ### 1. Clone & configure
 
 ```bash
-git clone https://github.com/manishhurix/RecruitLeadGen.git
-cd RecruitLeadGen
+git clone https://github.com/abhishek-hurix/HRecruitLeadGen.git
+cd HRecruitLeadGen
 cp .env.example backend/.env
 cp .env.example frontend/.env   # add VITE_GOOGLE_CLIENT_ID if using Google login
 ```
@@ -139,7 +142,7 @@ npm run dev         # http://localhost:5173
 
 | Role | URL | Email | Password |
 |------|-----|-------|----------|
-| Super Admin | `/admin/login` | `admin@hurixdigital.com` | `HurixAdmin@2026` |
+| Super Admin | `/admin/login` | `admin@hurixdigital.com` | value of `ADMIN_PASSWORD` |
 | Candidate | `/register` then `/login` | *(self-registered)* | *(set at registration)* |
 
 ---
@@ -243,8 +246,11 @@ Copy [`.env.example`](./.env.example) and configure:
 | `TEST_DATABASE_URL` | Test database for Vitest integration tests |
 | `JWT_ASSESSMENT_SECRET` | Candidate & assessment JWT secret |
 | `JWT_ADMIN_SECRET` | Admin JWT secret |
+| `ASSESSMENT_DURATION_MINUTES` | Timed assessment duration; defaults to `10` |
+| `ASSESSMENT_QUESTION_COUNT` | Number of questions per assessment; defaults to `10` |
 | `EMAIL_MOCK_MODE` | `true` = log emails instead of sending |
 | `SMTP_*` | Gmail or other SMTP provider |
+| `SUPABASE_*` | Supabase Auth URL, anon key, and service role key |
 | `GOOGLE_CLIENT_ID` | Backend Google token verification |
 | `VITE_GOOGLE_CLIENT_ID` | Frontend Google Sign-In button |
 
@@ -253,11 +259,19 @@ Copy [`.env.example`](./.env.example) and configure:
 ## Production Deployment
 
 ```bash
-./scripts/build-sandbox-images.sh   # if using Docker sandbox
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-See [`docs/14-DEPLOYMENT_PLAN.md`](./docs/14-DEPLOYMENT_PLAN.md).
+Production Compose runs:
+
+- `postgres` with persistent `postgres_data`
+- `api` with `prisma migrate deploy` and optional idempotent seed on startup
+- `frontend` Nginx on port `80`
+- persistent `uploads_data` for resumes
+
+Keep `INIT_DB_ON_START=true` for first deployment so the super admin, referrals, base question bank, and default inactive job roles are created automatically.
+
+See [`DOCKER_EC2_DEPLOY.md`](./DOCKER_EC2_DEPLOY.md) and [`docs/14-DEPLOYMENT_PLAN.md`](./docs/14-DEPLOYMENT_PLAN.md).
 
 ---
 
