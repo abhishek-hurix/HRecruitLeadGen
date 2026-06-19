@@ -57,7 +57,7 @@ export const config = {
   },
   assessment: {
     questionCount: parseInt(process.env.ASSESSMENT_QUESTION_COUNT || '10', 10),
-    durationMinutes: parseInt(process.env.ASSESSMENT_DURATION_MINUTES || '60', 10),
+    durationMinutes: parseInt(process.env.ASSESSMENT_DURATION_MINUTES || '10', 10),
   },
   storage: {
     provider: process.env.STORAGE_PROVIDER || 'local',

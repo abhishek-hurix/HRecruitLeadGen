@@ -90,6 +90,16 @@ enum CompensationType {
 
 enum ExperienceCategory {
   FRESHER
+  ONE_YEAR
+  TWO_YEARS
+  THREE_YEARS
+  FOUR_YEARS
+  FIVE_YEARS
+  SIX_YEARS
+  SEVEN_YEARS
+  EIGHT_YEARS
+  NINE_YEARS
+  TEN_YEARS
   ZERO_ONE
   ONE_TWO
   TWO_THREE

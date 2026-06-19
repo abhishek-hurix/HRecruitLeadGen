@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, Loader2, Clock } from 'lucide-react';
+import { Send, Loader2, Clock, Flag, ArrowRight } from 'lucide-react';
 import { useAssessmentToken } from '../hooks/useAssessmentToken';
 import { useTimer } from '../hooks/useTimer';
 import { isMobilePhone } from '../utils/device';
@@ -257,29 +257,38 @@ export function AssessmentPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={toggleMarkForReview}
-            disabled={isExpired}
-            className="rounded-lg bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
-          >
-            {markedForReview[currentQuestion.id] ? 'Unmark Review' : 'Mark for Review'}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleNext}
-            disabled={isExpired || currentIndex >= session.questions.length - 1}
-            className="rounded-lg bg-slate-700 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-600 disabled:opacity-50"
-          >
-            Next Question
-          </button>
-
-          <div className="mt-auto">
+          <div className="mt-auto rounded-xl border border-slate-700 bg-slate-800 p-4 shadow-lg">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
+              Question Actions
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={toggleMarkForReview}
+                disabled={isExpired}
+                className={`inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-semibold transition-colors disabled:opacity-50 ${
+                  markedForReview[currentQuestion.id]
+                    ? 'border-violet-400 bg-violet-500/20 text-violet-100 hover:bg-violet-500/30'
+                    : 'border-slate-600 bg-slate-900/40 text-slate-200 hover:border-violet-400 hover:text-violet-100'
+                }`}
+              >
+                <Flag size={15} />
+                {markedForReview[currentQuestion.id] ? 'Unmark' : 'Review'}
+              </button>
+              <button
+                type="button"
+                onClick={handleNext}
+                disabled={isExpired || currentIndex >= session.questions.length - 1}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-hurix-blue px-3 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+              >
+                Next
+                <ArrowRight size={15} />
+              </button>
+            </div>
             <button
               onClick={handleSubmit}
               disabled={submitting || isExpired}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-hurix-gradient px-4 py-3 font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-hurix-gradient px-4 py-3 font-semibold text-white shadow-lg shadow-hurix-blue/20 hover:opacity-90 disabled:opacity-50"
             >
               {submitting ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
               Submit Test

@@ -1,11 +1,15 @@
 export const EXPERIENCE_OPTIONS = [
   { value: 'FRESHER', label: 'Fresher' },
-  { value: 'ZERO_ONE', label: '1 Year' },
-  { value: 'ONE_TWO', label: '2 Years' },
-  { value: 'TWO_THREE', label: '3 Years' },
-  { value: 'THREE_FIVE', label: '5 Years' },
-  { value: 'FIVE_SEVEN', label: '7 Years' },
-  { value: 'SEVEN_TEN', label: '10 Years' },
+  { value: 'ONE_YEAR', label: '1 Year' },
+  { value: 'TWO_YEARS', label: '2 Years' },
+  { value: 'THREE_YEARS', label: '3 Years' },
+  { value: 'FOUR_YEARS', label: '4 Years' },
+  { value: 'FIVE_YEARS', label: '5 Years' },
+  { value: 'SIX_YEARS', label: '6 Years' },
+  { value: 'SEVEN_YEARS', label: '7 Years' },
+  { value: 'EIGHT_YEARS', label: '8 Years' },
+  { value: 'NINE_YEARS', label: '9 Years' },
+  { value: 'TEN_YEARS', label: '10 Years' },
   { value: 'TEN_PLUS', label: '10+ Years' },
 ] as const;
 
