@@ -1,0 +1,435 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Language {
+  PYTHON
+  JAVASCRIPT
+}
+
+enum Difficulty {
+  EASY
+  EASY_MEDIUM
+  MEDIUM
+  HARD
+}
+
+enum AssessmentStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+}
+
+enum SelectionStatus {
+  PENDING
+  SHORTLISTED
+  INTERVIEWED
+  SELECTED
+  REJECTED
+}
+
+enum TokenStatus {
+  CREATED
+  EMAIL_SENT
+  VERIFIED
+  STARTED
+  SUBMITTED
+  EXPIRED
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  BOTH
+}
+
+enum CandidateStatus {
+  REGISTERED
+  EMAIL_SENT
+  VERIFIED
+  STARTED
+  SUBMITTED
+  EXPIRED
+}
+
+enum CandidateAssessmentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+}
+
+enum DeviceType {
+  DESKTOP
+  TABLET
+  MOBILE
+}
+
+enum JobRoleStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum CompensationType {
+  HOURLY
+  MONTHLY
+  ANNUAL
+}
+
+enum ExperienceCategory {
+  FRESHER
+  ZERO_ONE
+  ONE_TWO
+  TWO_THREE
+  THREE_FIVE
+  FIVE_SEVEN
+  SEVEN_TEN
+  TEN_PLUS
+}
+
+enum AnswerMode {
+  CODE
+  COMPREHENSIVE
+  MCQ
+}
+
+model Visitor {
+  id                   String     @id @default(uuid())
+  visitorId            String     @unique @map("visitor_id")
+  firstTouchSource     String     @default("ORGANIC") @map("first_touch_source")
+  firstTouchMedium     String?    @map("first_touch_medium")
+  firstTouchCampaign   String?    @map("first_touch_campaign")
+  firstTouchTerm       String?    @map("first_touch_term")
+  firstTouchContent    String?    @map("first_touch_content")
+  lastTouchSource      String     @default("ORGANIC") @map("last_touch_source")
+  lastTouchMedium      String?    @map("last_touch_medium")
+  lastTouchCampaign    String?    @map("last_touch_campaign")
+  lastTouchTerm        String?    @map("last_touch_term")
+  lastTouchContent     String?    @map("last_touch_content")
+  landingPage          String     @map("landing_page") @db.Text
+  referrer             String?    @db.Text
+  deviceType           DeviceType @default(DESKTOP) @map("device_type")
+  firstVisitedAt       DateTime   @default(now()) @map("first_visited_at")
+  lastVisitedAt        DateTime   @default(now()) @map("last_visited_at")
+  candidateId          String?    @unique @map("candidate_id")
+  registeredAt         DateTime?  @map("registered_at")
+  isTest               Boolean    @default(false) @map("is_test")
+  isInternal           Boolean    @default(false) @map("is_internal")
+
+  candidate CandidateProfile? @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+
+  @@index([firstTouchSource])
+  @@index([lastTouchSource])
+  @@index([lastTouchCampaign])
+  @@index([deviceType])
+  @@index([firstVisitedAt])
+  @@index([isTest])
+  @@index([isInternal])
+  @@map("visitors")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String?       @map("password_hash")
+  supabaseUserId String?     @unique @map("supabase_user_id")
+  googleId     String?       @unique @map("google_id")
+  authProvider AuthProvider  @default(LOCAL) @map("auth_provider")
+  lastLoginAt  DateTime?     @map("last_login_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  candidateProfiles CandidateProfile[]
+
+  @@index([googleId])
+  @@index([supabaseUserId])
+  @@map("users")
+}
+
+model CandidateProfile {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  fullName        String    @map("full_name")
+  phone           String
+  countryCode     String    @default("+91") @map("country_code")
+  phoneNumber     String?   @map("phone_number")
+  fullPhone       String?   @map("full_phone")
+  phoneCountry    String    @default("India") @map("phone_country")
+  yearsOfExperience Int?    @map("years_of_experience")
+  experienceCategory ExperienceCategory? @map("experience_category")
+  linkedinUrl     String    @map("linkedin_url")
+  resumePath      String    @map("resume_path")
+  appliedRole     String    @default("General") @map("applied_role")
+  referralCode    String?   @map("referral_code")
+  emailVerified     Boolean                   @default(false) @map("email_verified")
+  emailVerifiedAt   DateTime?                 @map("email_verified_at")
+  verificationSentAt DateTime?                @map("verification_sent_at")
+  verificationAttempts Int                  @default(0) @map("verification_attempts")
+  verificationAttemptsWindowStart DateTime?  @map("verification_attempts_window_start")
+  candidateStatus   CandidateStatus           @default(REGISTERED) @map("candidate_status")
+  assessmentStatus  CandidateAssessmentStatus @default(NOT_STARTED) @map("assessment_status")
+  assessmentDate    DateTime?                 @map("assessment_date")
+  selectionStatus   SelectionStatus           @default(PENDING) @map("selection_status")
+  visitorId         String?                   @unique @map("visitor_id")
+  utmSource         String?                   @map("utm_source")
+  utmMedium         String?                   @map("utm_medium")
+  utmCampaign       String?                   @map("utm_campaign")
+  utmTerm           String?                   @map("utm_term")
+  utmContent        String?                   @map("utm_content")
+  firstTouchSource  String?                   @map("first_touch_source")
+  lastTouchSource   String?                   @map("last_touch_source")
+  attributionLandingPage String?              @map("attribution_landing_page") @db.Text
+  attributionReferrer    String?              @map("attribution_referrer") @db.Text
+  attributionDevice      DeviceType?          @map("attribution_device")
+  selectedRoleId         String?              @map("selected_role_id")
+  selectedRoleName       String?              @map("selected_role_name")
+  selectedCountry        String?              @map("selected_country")
+  selectedCompensation   String?              @map("selected_compensation")
+  selectedSkills         Json?                @map("selected_skills")
+  roleSelectedAt         DateTime?            @map("role_selected_at")
+  createdAt         DateTime                  @default(now()) @map("created_at")
+  updatedAt         DateTime                  @updatedAt @map("updated_at")
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visitor          Visitor?
+  selectedRole     JobRole?          @relation(fields: [selectedRoleId], references: [id], onDelete: SetNull)
+  assessmentTokens AssessmentToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  assessments      Assessment[]
+  submissions      Submission[]
+
+  @@index([emailVerified])
+  @@index([selectedRoleId])
+  @@map("candidate_profiles")
+}
+
+model JobRole {
+  id                    String           @id @default(uuid())
+  title                 String
+  country               String
+  compensationType      CompensationType @map("compensation_type")
+  hourlyRate            Decimal?         @map("hourly_rate") @db.Decimal(12, 2)
+  monthlySalary         Decimal?         @map("monthly_salary") @db.Decimal(14, 2)
+  currency              String           @default("USD")
+  skills                Json             @default("[]")
+  description           String?          @db.Text
+  status                JobRoleStatus    @default(ACTIVE)
+  openPositions         Int              @default(1) @map("open_positions")
+  applicationsReceived  Int              @default(0) @map("applications_received")
+  assessmentLanguages   Json             @default("[\"PYTHON\"]") @map("assessment_languages")
+  closingDate           DateTime?        @map("closing_date")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+
+  candidates  CandidateProfile[]
+  assessments Assessment[]
+  questions   Question[]
+
+  @@index([status])
+  @@map("job_roles")
+}
+
+model Referral {
+  id           String   @id @default(uuid())
+  employeeId   String   @unique @map("employee_id")
+  employeeName String?  @map("employee_name")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("referrals")
+}
+
+model AssessmentToken {
+  id          String      @id @default(uuid())
+  candidateId String      @map("candidate_id")
+  jti         String      @unique
+  email       String
+  status      TokenStatus @default(CREATED)
+  expiresAt   DateTime    @map("expires_at")
+  usedAt      DateTime?   @map("used_at")
+  isRevoked   Boolean     @default(false) @map("is_revoked")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  candidate CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId])
+  @@index([status])
+  @@map("assessment_tokens")
+}
+
+model EmailVerificationToken {
+  id          String    @id @default(uuid())
+  candidateId String    @map("candidate_id")
+  jti         String    @unique
+  email       String
+  expiresAt   DateTime  @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  candidate CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId])
+  @@map("email_verification_tokens")
+}
+
+model Assessment {
+  id          String           @id @default(uuid())
+  candidateId String           @map("candidate_id")
+  jobRoleId   String?          @map("job_role_id")
+  language    Language
+  status      AssessmentStatus @default(PENDING)
+  questionIds Json             @map("question_ids")
+  startedAt   DateTime?        @map("started_at")
+  expiresAt   DateTime?        @map("expires_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  candidate  CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  jobRole    JobRole?         @relation(fields: [jobRoleId], references: [id], onDelete: SetNull)
+  submission Submission?
+
+  @@index([candidateId, status])
+  @@index([jobRoleId])
+  @@map("assessments")
+}
+
+model Question {
+  id           String     @id @default(uuid())
+  jobRoleId    String?    @map("job_role_id")
+  experienceCategory ExperienceCategory? @map("experience_category")
+  answerMode   AnswerMode @default(CODE) @map("answer_mode")
+  language     Language
+  title        String
+  description  String     @db.Text
+  inputFormat  String     @map("input_format") @db.Text
+  outputFormat String     @map("output_format") @db.Text
+  sampleInput  String     @map("sample_input") @db.Text
+  sampleOutput String     @map("sample_output") @db.Text
+  constraints  String     @db.Text
+  difficulty   Difficulty
+  topic        String
+  starterCode  String     @map("starter_code") @db.Text
+  mcqOptions   Json?      @map("mcq_options")
+  correctOptionIndex Int? @map("correct_option_index")
+  explanation  String?    @db.Text
+  isActive     Boolean    @default(true) @map("is_active")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  testCases         QuestionTestCase[]
+  submissionAnswers SubmissionAnswer[]
+  jobRole           JobRole?           @relation(fields: [jobRoleId], references: [id], onDelete: SetNull)
+
+  @@index([language, isActive])
+  @@index([jobRoleId])
+  @@index([experienceCategory])
+  @@map("questions")
+}
+
+model QuestionTestCase {
+  id             String  @id @default(uuid())
+  questionId     String  @map("question_id")
+  input          String  @db.Text
+  expectedOutput String  @map("expected_output") @db.Text
+  isHidden       Boolean @default(true) @map("is_hidden")
+  sortOrder      Int     @default(0) @map("sort_order")
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@map("question_testcases")
+}
+
+model Submission {
+  id               String   @id @default(uuid())
+  assessmentId     String   @unique @map("assessment_id")
+  candidateId      String   @map("candidate_id")
+  score            Decimal  @db.Decimal(5, 2)
+  passedQuestions  Int      @map("passed_questions")
+  totalQuestions   Int      @map("total_questions")
+  aiReviewStatus   String   @default("PENDING") @map("ai_review_status")
+  aiReview         Json?    @map("ai_review")
+  aiReviewError    String?  @map("ai_review_error") @db.Text
+  aiReviewedAt     DateTime? @map("ai_reviewed_at")
+  submittedAt      DateTime @default(now()) @map("submitted_at")
+
+  assessment Assessment         @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  candidate  CandidateProfile   @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  answers    SubmissionAnswer[]
+
+  @@index([candidateId])
+  @@map("submissions")
+}
+
+model SubmissionAnswer {
+  id              String  @id @default(uuid())
+  submissionId    String  @map("submission_id")
+  questionId      String  @map("question_id")
+  code            String  @db.Text
+  selectedOptionIndex Int? @map("selected_option_index")
+  passedTests     Int     @default(0) @map("passed_tests")
+  failedTests     Int     @default(0) @map("failed_tests")
+  executionTimeMs Int?    @map("execution_time_ms")
+  memoryKb        Int?    @map("memory_kb")
+  testResults     Json?   @map("test_results")
+  isFullyPassed   Boolean @default(false) @map("is_fully_passed")
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id])
+
+  @@index([submissionId])
+  @@map("submission_answers")
+}
+
+model AdminUser {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         AdminRole @default(ADMIN)
+  createdById  String?   @map("created_by_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastLoginAt  DateTime? @map("last_login_at")
+
+  createdBy     AdminUser?  @relation("AdminCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAdmins AdminUser[] @relation("AdminCreatedBy")
+  auditLogs     AuditLog[]
+
+  @@map("admin_users")
+}
+
+model PlatformSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("platform_settings")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  adminUserId String?  @map("admin_user_id")
+  action      String
+  entityType  String?  @map("entity_type")
+  entityId    String?  @map("entity_id")
+  metadata    Json?
+  ipAddress   String?  @map("ip_address")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  adminUser AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+
+  @@index([adminUserId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

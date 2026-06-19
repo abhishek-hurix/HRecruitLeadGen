@@ -1,0 +1,39 @@
+# Local notes (may contain secrets)
+COMMANDS.txt
+
+# Environment (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# User uploads & generated files
+uploads/
+backend/uploads/*
+!backend/uploads/resumes/
+backend/uploads/resumes/*
+!backend/uploads/resumes/.gitkeep
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.cursor/
+
+# Test / coverage
+coverage/
+
+# Root-level assets (keep frontend/public)
+/*.png

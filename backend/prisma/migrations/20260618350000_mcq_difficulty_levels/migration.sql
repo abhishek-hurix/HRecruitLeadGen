@@ -1,0 +1,2 @@
+ALTER TYPE "Difficulty" ADD VALUE 'MEDIUM';
+ALTER TYPE "Difficulty" ADD VALUE 'HARD';

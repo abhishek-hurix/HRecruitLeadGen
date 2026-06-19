@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hurix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-hurix_talent}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hurix} -d ${POSTGRES_DB:-hurix_talent}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hurix-network
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+      JWT_ASSESSMENT_SECRET: ${JWT_ASSESSMENT_SECRET}
+      JWT_ADMIN_SECRET: ${JWT_ADMIN_SECRET}
+      CANDIDATE_PORTAL_EXPIRY_DAYS: ${CANDIDATE_PORTAL_EXPIRY_DAYS:-30}
+      ADMIN_TOKEN_EXPIRY_HOURS: ${ADMIN_TOKEN_EXPIRY_HOURS:-8}
+      ASSESSMENT_TOKEN_EXPIRY_DAYS: ${ASSESSMENT_TOKEN_EXPIRY_DAYS:-7}
+      EMAIL_VERIFICATION_EXPIRY_HOURS: ${EMAIL_VERIFICATION_EXPIRY_HOURS:-24}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_SCORING_MODEL: ${AI_SCORING_MODEL:-gpt-4o-mini}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
+      EMAIL_MOCK_MODE: ${EMAIL_MOCK_MODE:-false}
+      EMAIL_FROM: ${EMAIL_FROM}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+      UPLOAD_DIR: ${UPLOAD_DIR:-/app/uploads/resumes}
+      MAX_RESUME_SIZE_MB: ${MAX_RESUME_SIZE_MB:-5}
+      ASSESSMENT_QUESTION_COUNT: ${ASSESSMENT_QUESTION_COUNT:-10}
+      ASSESSMENT_DURATION_MINUTES: ${ASSESSMENT_DURATION_MINUTES:-60}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hurix-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - hurix-network
+
+volumes:
+  postgres_data:
+  uploads_data:
+
+networks:
+  hurix-network:
+    driver: bridge
