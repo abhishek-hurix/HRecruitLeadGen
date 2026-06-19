@@ -19,7 +19,7 @@ import {
 import { CandidateLayout } from '../components/layout/CandidateLayout';
 import { getCandidateDashboard, getAssessmentAccessToken, getCandidateJobRoles, resendVerificationEmail } from '../api/candidate';
 import { initSessionAuth, selectRoleAndStart } from '../api/assessment';
-import { getCandidateToken, setCandidateToken } from '../api/client';
+import { clearCandidateToken, getCandidateToken, setCandidateToken } from '../api/client';
 import { getApiErrorMessage, isLinkExpiredError, getApiErrorStatus } from '../utils/apiErrors';
 import { isMobilePhone } from '../utils/device';
 import { formatDate } from '../utils/validation';
@@ -55,7 +55,11 @@ export function CandidateDashboardPage() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['candidate-dashboard'],
-    queryFn: getCandidateDashboard,
+    queryFn: () => {
+      const candidateToken = getCandidateToken();
+      if (candidateToken) setCandidateToken(candidateToken);
+      return getCandidateDashboard();
+    },
     retry: false,
     refetchOnWindowFocus: true,
     refetchInterval: (query) =>
@@ -70,6 +74,7 @@ export function CandidateDashboardPage() {
 
   useEffect(() => {
     if (error && isLinkExpiredError(error)) {
+      clearCandidateToken();
       navigate('/login');
     }
   }, [error, navigate]);
@@ -122,7 +127,7 @@ export function CandidateDashboardPage() {
       initSessionAuth(token);
       const session = await selectRoleAndStart(roleId);
       const assessmentToken = session.token || token;
-      initSessionAuth(assessmentToken);
+      if (candidateToken) setCandidateToken(candidateToken);
       navigate(`/assessment?token=${encodeURIComponent(assessmentToken)}`);
     } catch (err) {
       if (candidateToken) setCandidateToken(candidateToken);
@@ -303,9 +308,11 @@ export function CandidateDashboardPage() {
                       {availableRoles.map((role) => {
                         const alreadySelected = data.appliedPosition?.roleId === role.id || data.appliedPosition?.roleName === role.title;
                         return (
-                          <article key={role.id} className="flex h-full flex-col rounded-xl border border-slate-100 bg-white/80 p-4 shadow-sm">
+                          <article key={role.id} className="flex h-full flex-col rounded-xl border border-slate-100 bg-white/80 p-5 shadow-sm">
                             <h3 className="text-base font-bold text-hurix-charcoal">{role.title}</h3>
-                            <p className="mt-2 line-clamp-3 text-sm text-hurix-gray">{role.description || 'Role-specific assessment opportunity.'}</p>
+                            <p className="mt-2 line-clamp-2 min-h-[2.5rem] text-sm leading-5 text-hurix-gray">
+                              {role.description || 'Role-specific assessment opportunity.'}
+                            </p>
 
                             <div className="mt-4 space-y-2 text-xs text-hurix-gray">
                               <div className="flex items-center gap-2">
@@ -319,31 +326,33 @@ export function CandidateDashboardPage() {
                             </div>
 
                             {role.skills.length > 0 && (
-                              <div className="mt-4 flex flex-wrap gap-1.5">
+                              <div className="mt-4 flex flex-wrap gap-2">
                                 {role.skills.slice(0, 4).map((skill) => (
-                                  <span key={skill} className="rounded-full bg-hurix-blue/10 px-2 py-0.5 text-[11px] font-medium text-hurix-blue">
+                                  <span key={skill} className="rounded-full bg-hurix-blue/10 px-2.5 py-1 text-[11px] font-medium text-hurix-blue">
                                     {skill}
                                   </span>
                                 ))}
                               </div>
                             )}
 
-                            <button
-                              type="button"
-                              onClick={() => handleGiveAssessment(role.id)}
-                              disabled={startingRoleId !== null || mobileBlocked}
-                              className="btn-primary mt-auto w-full py-2.5 text-sm disabled:opacity-60"
-                            >
-                              {startingRoleId === role.id ? (
-                                <Loader2 className="mx-auto animate-spin" size={18} />
-                              ) : data.assessment.hasInProgress && alreadySelected ? (
-                                'Continue Assessment'
-                              ) : alreadySelected ? (
-                                'Give Assessment'
-                              ) : (
-                                'Give Assessment'
-                              )}
-                            </button>
+                            <div className="mt-auto pt-5">
+                              <button
+                                type="button"
+                                onClick={() => handleGiveAssessment(role.id)}
+                                disabled={startingRoleId !== null || mobileBlocked}
+                                className="btn-primary w-full py-3 text-sm disabled:opacity-60"
+                              >
+                                {startingRoleId === role.id ? (
+                                  <Loader2 className="mx-auto animate-spin" size={18} />
+                                ) : data.assessment.hasInProgress && alreadySelected ? (
+                                  'Restart Assessment'
+                                ) : alreadySelected ? (
+                                  'Give Assessment'
+                                ) : (
+                                  'Give Assessment'
+                                )}
+                              </button>
+                            </div>
                           </article>
                         );
                       })}

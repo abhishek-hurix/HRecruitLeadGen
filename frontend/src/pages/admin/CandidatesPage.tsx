@@ -9,6 +9,8 @@ import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { formatDate } from '../../utils/validation';
 import { EXPERIENCE_OPTIONS } from '../../utils/experience';
 
+const CANDIDATES_PAGE_SIZE = 6;
+
 export function CandidatesPage() {
   const { hasPermission } = useAdminAuth();
   const [search, setSearch] = useState('');
@@ -29,7 +31,7 @@ export function CandidatesPage() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['candidates', search, status, experience, country, minScore, role, page],
+    queryKey: ['candidates', search, status, experience, country, minScore, role, page, CANDIDATES_PAGE_SIZE],
     queryFn: () =>
       getCandidates({
         search,
@@ -39,6 +41,7 @@ export function CandidatesPage() {
         minScore: minScore ? Number(minScore) : undefined,
         role: role === 'all' ? undefined : role,
         page,
+        limit: CANDIDATES_PAGE_SIZE,
       }),
   });
 
@@ -92,16 +95,16 @@ export function CandidatesPage() {
   };
 
   const phoneActions = (phone: string) => (
-    <div className="inline-flex items-center gap-2">
-      <span>{phone}</span>
+    <div className="inline-flex min-w-0 items-center gap-1">
+      <span className="truncate">{phone}</span>
       <button
         type="button"
         onClick={() => copyPhoneNumber(phone)}
-        className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-hurix-charcoal hover:bg-slate-50"
-        title="Copy phone number"
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-200 text-hurix-charcoal hover:bg-slate-50"
+        title={copiedPhone === phone ? 'Copied' : 'Copy phone number'}
+        aria-label={copiedPhone === phone ? 'Copied phone number' : 'Copy phone number'}
       >
         <Copy size={12} />
-        {copiedPhone === phone ? 'Copied' : 'Copy'}
       </button>
       <a
         href={`tel:${phone.replace(/[^\d+]/g, '')}`}
@@ -237,21 +240,34 @@ export function CandidatesPage() {
       </div>
 
       {/* Desktop table */}
-      <div className="hidden lg:block card-premium overflow-x-auto p-0">
-        <table className="w-full text-sm">
+      <div className="hidden lg:block card-premium overflow-hidden p-0">
+        <table className="w-full table-fixed text-xs">
+          <colgroup>
+            <col className="w-[7%]" />
+            <col className="w-[9%]" />
+            <col className="w-[14%]" />
+            <col className="w-[13%]" />
+            <col className="w-[8%]" />
+            <col className="w-[9%]" />
+            <col className="w-[12%]" />
+            <col className="w-[10%]" />
+            <col className="w-[6%]" />
+            <col className="w-[8%]" />
+            <col className="w-[4%]" />
+          </colgroup>
           <thead className="bg-slate-50 border-b">
             <tr>
-              <th className="text-left p-3 font-semibold whitespace-nowrap">App ID</th>
-              <th className="text-left p-3 font-semibold">Name</th>
-              <th className="text-left p-3 font-semibold">Email</th>
-              <th className="text-left p-3 font-semibold">Phone</th>
-              <th className="text-left p-3 font-semibold">Country</th>
-              <th className="text-left p-3 font-semibold">Experience</th>
-              <th className="text-left p-3 font-semibold">Role</th>
-              <th className="text-left p-3 font-semibold">Assessment</th>
-              <th className="text-left p-3 font-semibold">Score</th>
-              <th className="text-left p-3 font-semibold">Registered</th>
-              <th className="text-left p-3 font-semibold">Actions</th>
+              <th className="px-2 py-3 text-left font-semibold">App ID</th>
+              <th className="px-2 py-3 text-left font-semibold">Name</th>
+              <th className="px-2 py-3 text-left font-semibold">Email</th>
+              <th className="px-2 py-3 text-left font-semibold">Phone</th>
+              <th className="px-2 py-3 text-left font-semibold">Country</th>
+              <th className="px-2 py-3 text-left font-semibold">Experience</th>
+              <th className="px-2 py-3 text-left font-semibold">Role</th>
+              <th className="px-2 py-3 text-left font-semibold">Assessment</th>
+              <th className="px-2 py-3 text-left font-semibold">Score</th>
+              <th className="px-2 py-3 text-left font-semibold">Registered</th>
+              <th className="px-2 py-3 text-left font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -262,23 +278,23 @@ export function CandidatesPage() {
             ) : (
               data?.data.map((c) => (
                 <tr key={c.id} className="border-b hover:bg-slate-50">
-                  <td className="p-3 font-mono text-xs">{c.applicationId || c.id.slice(0, 8).toUpperCase()}</td>
-                  <td className="p-3 font-medium">{c.fullName}</td>
-                  <td className="p-3 text-hurix-gray max-w-[140px] truncate">{c.email}</td>
-                  <td className="p-3 text-hurix-gray whitespace-nowrap text-xs">{phoneActions(c.phone)}</td>
-                  <td className="p-3 text-hurix-gray">{c.phoneCountry || '—'}</td>
-                  <td className="p-3 text-hurix-gray whitespace-nowrap">{c.experienceLabel || '—'}</td>
-                  <td className="p-3 text-hurix-gray whitespace-nowrap text-xs">{c.appliedRole || '—'}</td>
-                  <td className="p-3">{statusBadge(c.assessmentStatus)}</td>
-                  <td className="p-3">{c.score !== null ? `${c.score}/10` : '—'}</td>
-                  <td className="p-3 text-hurix-gray whitespace-nowrap text-xs">{formatDate(c.createdAt)}</td>
-                  <td className="p-3">
-                    <div className="flex flex-col gap-1 min-w-[120px]">
-                      <Link to={`/admin/candidates/${c.id}?view=profile`} className="text-hurix-blue hover:underline text-xs">View</Link>
-                      <button onClick={() => openResumePreview(c.id, c.fullName)} className="text-hurix-blue hover:underline text-xs text-left" disabled={loadingResumeId === c.id}>
+                  <td className="truncate px-2 py-2.5 font-mono">{c.applicationId || c.id.slice(0, 8).toUpperCase()}</td>
+                  <td className="truncate px-2 py-2.5 font-medium">{c.fullName}</td>
+                  <td className="truncate px-2 py-2.5 text-hurix-gray" title={c.email}>{c.email}</td>
+                  <td className="truncate px-2 py-2.5 text-hurix-gray">{phoneActions(c.phone)}</td>
+                  <td className="truncate px-2 py-2.5 text-hurix-gray">{c.phoneCountry || '—'}</td>
+                  <td className="truncate px-2 py-2.5 text-hurix-gray">{c.experienceLabel || '—'}</td>
+                  <td className="truncate px-2 py-2.5 text-hurix-gray" title={c.appliedRole || undefined}>{c.appliedRole || '—'}</td>
+                  <td className="px-2 py-2.5">{statusBadge(c.assessmentStatus)}</td>
+                  <td className="px-2 py-2.5">{c.score !== null ? `${c.score}/10` : '—'}</td>
+                  <td className="truncate px-2 py-2.5 text-hurix-gray">{formatDate(c.createdAt)}</td>
+                  <td className="px-2 py-2.5">
+                    <div className="flex flex-col gap-0.5">
+                      <Link to={`/admin/candidates/${c.id}?view=profile`} className="text-hurix-blue hover:underline">View</Link>
+                      <button onClick={() => openResumePreview(c.id, c.fullName)} className="text-left text-hurix-blue hover:underline" disabled={loadingResumeId === c.id}>
                         {loadingResumeId === c.id ? 'Opening...' : 'Resume'}
                       </button>
-                      <Link to={`/admin/candidates/${c.id}?view=assessment`} className="text-hurix-blue hover:underline text-xs flex items-center gap-1"><ClipboardList size={12} /> Assessment</Link>
+                      <Link to={`/admin/candidates/${c.id}?view=assessment`} className="text-hurix-blue hover:underline"><ClipboardList size={12} /></Link>
                     </div>
                   </td>
                 </tr>

@@ -72,12 +72,14 @@ export class AssessmentService {
       if (existing.jobRoleId !== jobRoleId) {
         throw new AppError(409, 'Please complete your in-progress assessment before starting another role.');
       }
-      const response = await this.getAssessmentSession(existing.id, activeCandidate.id);
-      if (activeCandidate.id !== candidateId) {
-        const { token } = await assessmentTokenService.createToken(activeCandidate.id, candidate.user.email);
-        return { ...response, token };
-      }
-      return response;
+      await prisma.assessment.updateMany({
+        where: {
+          candidateId: activeCandidate.id,
+          jobRoleId,
+          status: AssessmentStatus.IN_PROGRESS,
+        },
+        data: { status: AssessmentStatus.EXPIRED },
+      });
     }
 
     const role = candidate.selectedRoleId === jobRoleId

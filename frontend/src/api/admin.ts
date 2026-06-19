@@ -34,6 +34,7 @@ export async function getCandidates(params: {
   role?: string;
   minScore?: number;
   page?: number;
+  limit?: number;
 }) {
   const { data } = await api.get('/admin/candidates', { params });
   return data as {
