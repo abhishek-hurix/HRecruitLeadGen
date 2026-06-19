@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Send, Loader2, Clock, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useAssessmentToken } from '../hooks/useAssessmentToken';
@@ -25,6 +25,7 @@ export function AssessmentPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const hasAutoSubmittedRef = useRef(false);
   const isMobile = isMobilePhone();
 
   const handleExpire = useCallback(() => {
@@ -32,6 +33,32 @@ export function AssessmentPage() {
   }, []);
 
   const { formatted, isLow, isExpired } = useTimer(session?.expiresAt || null, handleExpire);
+
+  useEffect(() => {
+    if (!isExpired || !session || hasAutoSubmittedRef.current) return;
+
+    hasAutoSubmittedRef.current = true;
+    setSubmitting(true);
+    setShowSubmitConfirm(false);
+    setError('Time is up. Submitting your assessment automatically...');
+
+    const allAnswers = session.questions.map((q) => ({
+      questionId: q.id,
+      selectedOptionIndex: answers[q.id] ?? null,
+    }));
+
+    submitAssessment(allAnswers)
+      .then(() => {
+        navigate(`/thank-you?token=${encodeURIComponent(token!)}`);
+      })
+      .catch((err) => {
+        hasAutoSubmittedRef.current = false;
+        setError(getApiErrorMessage(err, 'Auto submission failed'));
+      })
+      .finally(() => {
+        setSubmitting(false);
+      });
+  }, [answers, isExpired, navigate, session, token]);
 
   useEffect(() => {
     if (!token) {
