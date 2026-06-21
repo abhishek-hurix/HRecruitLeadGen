@@ -105,6 +105,13 @@ export interface CandidateDashboard {
     resendsRemaining: number;
     canResend: boolean;
   };
+  mobileVerification: {
+    phoneVerified: boolean;
+    verifiedAt: string | null;
+    otpSentAt: string | null;
+    resendsRemaining: number;
+    canResend: boolean;
+  };
   appliedPosition: {
     roleId: string | null;
     roleName: string | null;

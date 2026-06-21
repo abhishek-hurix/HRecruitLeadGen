@@ -71,3 +71,13 @@ export async function deleteCandidateResume(req: AuthRequest, res: Response, nex
     next(error);
   }
 }
+
+export async function updateCandidatePhone(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const phone = String(req.body.phone || '');
+    const data = await candidatePortalService.updatePhone(req.candidateId!, phone);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}

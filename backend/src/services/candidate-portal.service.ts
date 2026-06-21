@@ -4,6 +4,7 @@ import { AppError } from '../utils/errors';
 import { assessmentTokenService } from './assessment-token.service';
 import { getExperienceLabel } from '../utils/experience';
 import { storage } from './storage/storage.service';
+import { getCountryIsoByName, parseAndValidatePhoneInput } from '../utils/phone';
 
 export class CandidatePortalService {
   async getDashboard(candidateId: string) {
@@ -94,6 +95,14 @@ export class CandidatePortalService {
 
     const passedTests = latestSubmission?.answers.reduce((sum, a) => sum + a.passedTests, 0) ?? 0;
     const failedTests = latestSubmission?.answers.reduce((sum, a) => sum + a.failedTests, 0) ?? 0;
+    const mobileVerificationAttempts = (() => {
+      const windowStart = candidate.phoneVerificationAttemptsWindowStart;
+      const now = Date.now();
+      if (!windowStart || now - windowStart.getTime() >= 60 * 60 * 1000) {
+        return 0;
+      }
+      return candidate.phoneVerificationAttempts;
+    })();
 
     const timeline = {
       registered: true,
@@ -192,6 +201,13 @@ export class CandidatePortalService {
             })()
         ),
         canResend: !candidate.emailVerified,
+      },
+      mobileVerification: {
+        phoneVerified: candidate.phoneVerified,
+        verifiedAt: candidate.phoneVerifiedAt,
+        otpSentAt: candidate.phoneOtpSentAt,
+        resendsRemaining: Math.max(0, 3 - mobileVerificationAttempts),
+        canResend: !candidate.phoneVerified && mobileVerificationAttempts < 3,
       },
       timeline,
       assessment: {
@@ -325,6 +341,44 @@ export class CandidatePortalService {
 
     await storage.delete(resume.filePath).catch(() => {});
     return { deletedResumeId: resume.id, primaryResumeId: nextPrimary?.id || resumes.find((item) => item.isPrimary)?.id || null };
+  }
+
+  async updatePhone(candidateId: string, phoneInput: string) {
+    const candidate = await prisma.candidateProfile.findUnique({ where: { id: candidateId } });
+    if (!candidate) throw new AppError(404, 'Candidate not found');
+
+    const countryIso = getCountryIsoByName(candidate.phoneCountry) || 'IN';
+    const parsedPhone = parseAndValidatePhoneInput(countryIso, phoneInput);
+    const phoneChanged = (candidate.fullPhone || candidate.phone) !== parsedPhone.fullPhone;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.mobileVerificationOtp.updateMany({
+        where: { candidateId, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+
+      return tx.candidateProfile.update({
+        where: { id: candidateId },
+        data: {
+          phone: parsedPhone.phoneNumber,
+          countryCode: parsedPhone.countryCode,
+          phoneNumber: parsedPhone.phoneNumber,
+          fullPhone: parsedPhone.fullPhone,
+          phoneCountry: parsedPhone.phoneCountry,
+          phoneVerified: phoneChanged ? false : candidate.phoneVerified,
+          phoneVerifiedAt: phoneChanged ? null : candidate.phoneVerifiedAt,
+          phoneOtpSentAt: null,
+        },
+      });
+    });
+
+    return {
+      phone: updated.fullPhone || updated.phone,
+      phoneNumber: updated.phoneNumber || updated.phone,
+      countryCode: updated.countryCode,
+      phoneCountry: updated.phoneCountry,
+      phoneVerified: updated.phoneVerified,
+    };
   }
 }
 
