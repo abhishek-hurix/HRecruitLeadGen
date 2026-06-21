@@ -30,13 +30,6 @@ export function getCountryName(iso: string): string {
   }
 }
 
-export function getCountryIsoByName(countryName: string): CountryCode | null {
-  const normalized = countryName.trim().toLowerCase();
-  if (!normalized) return null;
-
-  return getCountries().find((iso) => getCountryName(iso).toLowerCase() === normalized) || null;
-}
-
 export function listSupportedCountries() {
   return getCountries()
     .map((iso) => {
@@ -82,33 +75,6 @@ export function parseAndValidatePhone(
     phoneCountry: getCountryName(iso),
     iso,
   };
-}
-
-export function parseAndValidatePhoneInput(
-  currentCountryIso: string,
-  phoneInput: string
-): ParsedPhone {
-  const trimmed = phoneInput.trim();
-  if (!trimmed) {
-    throw new AppError(400, 'Phone number is required');
-  }
-
-  const internationalPhone = trimmed.startsWith('+')
-    ? parsePhoneNumberFromString(trimmed)
-    : null;
-
-  if (internationalPhone?.isValid() && internationalPhone.country) {
-    const iso = internationalPhone.country;
-    return {
-      countryCode: `+${internationalPhone.countryCallingCode}`,
-      phoneNumber: internationalPhone.nationalNumber,
-      fullPhone: internationalPhone.format('E.164'),
-      phoneCountry: getCountryName(iso),
-      iso,
-    };
-  }
-
-  return parseAndValidatePhone(currentCountryIso, trimmed);
 }
 
 export function isValidPhoneForCountry(countryIso: string, nationalNumber: string): boolean {

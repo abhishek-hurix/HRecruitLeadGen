@@ -29,35 +29,6 @@ export async function resendVerificationEmail(): Promise<{ message: string }> {
   return data;
 }
 
-export async function requestMobileOtp(): Promise<{
-  message: string;
-  otpSentAt: string;
-  resendsRemaining: number;
-  devOtp?: string;
-}> {
-  const { data } = await api.post('/candidate/mobile/request-otp');
-  return data.data;
-}
-
-export async function verifyMobileOtp(otp: string): Promise<{
-  phoneVerified: boolean;
-  verifiedAt: string;
-}> {
-  const { data } = await api.post('/candidate/mobile/verify-otp', { otp });
-  return data.data;
-}
-
-export async function updateCandidatePhone(phone: string): Promise<{
-  phone: string;
-  phoneNumber: string;
-  countryCode: string;
-  phoneCountry: string;
-  phoneVerified: boolean;
-}> {
-  const { data } = await api.patch('/candidate/phone', { phone });
-  return data.data;
-}
-
 export async function uploadCandidateResume(file: File) {
   const formData = new FormData();
   formData.append('resume', file);

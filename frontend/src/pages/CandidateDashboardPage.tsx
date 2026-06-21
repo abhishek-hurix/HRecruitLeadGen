@@ -12,8 +12,6 @@ import {
   User,
   Mail,
   MailCheck,
-  Phone,
-  Pencil,
   AlertCircle,
   Briefcase,
   MapPin,
@@ -28,12 +26,9 @@ import {
   getAssessmentAccessToken,
   getCandidateJobRoles,
   getCandidateResumePreviewUrl,
-  requestMobileOtp,
   resendVerificationEmail,
   setPrimaryCandidateResume,
   uploadCandidateResume,
-  updateCandidatePhone,
-  verifyMobileOtp,
 } from '../api/candidate';
 import { initSessionAuth, selectRoleAndStart } from '../api/assessment';
 import { clearCandidateToken, getCandidateToken, setCandidateToken } from '../api/client';
@@ -70,14 +65,6 @@ export function CandidateDashboardPage() {
   const [resending, setResending] = useState(false);
   const [actionError, setActionError] = useState('');
   const [resendSuccess, setResendSuccess] = useState(false);
-  const [mobileSuccess, setMobileSuccess] = useState('');
-  const [mobileOtp, setMobileOtp] = useState('');
-  const [mobileOtpRequested, setMobileOtpRequested] = useState(false);
-  const [requestingMobileOtp, setRequestingMobileOtp] = useState(false);
-  const [verifyingMobileOtp, setVerifyingMobileOtp] = useState(false);
-  const [editingPhone, setEditingPhone] = useState(false);
-  const [phoneDraft, setPhoneDraft] = useState('');
-  const [savingPhone, setSavingPhone] = useState(false);
   const [uploadingResume, setUploadingResume] = useState(false);
   const [primaryResumeMode, setPrimaryResumeMode] = useState(false);
   const [selectedPrimaryResumeId, setSelectedPrimaryResumeId] = useState('');
@@ -126,12 +113,6 @@ export function CandidateDashboardPage() {
     }
   }, [resumePreview]);
 
-  useEffect(() => {
-    if (data?.profile.phone && !editingPhone) {
-      setPhoneDraft(data.profile.phone);
-    }
-  }, [data?.profile.phone, editingPhone]);
-
   const handleResendVerification = async () => {
     setResending(true);
     setActionError('');
@@ -147,59 +128,6 @@ export function CandidateDashboardPage() {
       }
     } finally {
       setResending(false);
-    }
-  };
-
-  const handleRequestMobileOtp = async () => {
-    setRequestingMobileOtp(true);
-    setActionError('');
-    setMobileSuccess('');
-    try {
-      const result = await requestMobileOtp();
-      setMobileOtpRequested(true);
-      setMobileOtp('');
-      setMobileSuccess(result.devOtp ? `OTP sent. Dev OTP: ${result.devOtp}` : result.message);
-      await queryClient.invalidateQueries({ queryKey: ['candidate-dashboard'] });
-    } catch (err) {
-      setActionError(getApiErrorMessage(err, 'Failed to send OTP.'));
-    } finally {
-      setRequestingMobileOtp(false);
-    }
-  };
-
-  const handleVerifyMobileOtp = async () => {
-    setVerifyingMobileOtp(true);
-    setActionError('');
-    setMobileSuccess('');
-    try {
-      await verifyMobileOtp(mobileOtp);
-      setMobileOtp('');
-      setMobileOtpRequested(false);
-      setMobileSuccess('Mobile number verified successfully.');
-      await queryClient.invalidateQueries({ queryKey: ['candidate-dashboard'] });
-    } catch (err) {
-      setActionError(getApiErrorMessage(err, 'Invalid or expired OTP.'));
-    } finally {
-      setVerifyingMobileOtp(false);
-    }
-  };
-
-  const handleSavePhone = async () => {
-    setSavingPhone(true);
-    setActionError('');
-    setMobileSuccess('');
-    try {
-      const result = await updateCandidatePhone(phoneDraft);
-      setPhoneDraft(result.phone);
-      setEditingPhone(false);
-      setMobileOtp('');
-      setMobileOtpRequested(false);
-      setMobileSuccess('Mobile number updated. Please verify the new number with OTP.');
-      await queryClient.invalidateQueries({ queryKey: ['candidate-dashboard'] });
-    } catch (err) {
-      setActionError(getApiErrorMessage(err, 'Failed to update mobile number.'));
-    } finally {
-      setSavingPhone(false);
     }
   };
 
@@ -356,7 +284,6 @@ export function CandidateDashboardPage() {
 
   const mobileBlocked = isMobilePhone();
   const verified = data.verification.emailVerified;
-  const mobileVerified = data.mobileVerification.phoneVerified;
   const hasSubmittedAssessment = data.assessment.hasCompleted || data.history.length > 0;
   const completedRoleIds = new Set(data.history.map((item) => item.jobRoleId).filter(Boolean));
   const completedRoleNames = new Set(
@@ -396,13 +323,6 @@ export function CandidateDashboardPage() {
           </div>
         )}
 
-        {mobileSuccess && (
-          <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm flex items-start gap-2">
-            <Phone className="shrink-0 mt-0.5" size={18} />
-            <span>{mobileSuccess}</span>
-          </div>
-        )}
-
         {actionError && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-start gap-2">
             <AlertCircle className="shrink-0 mt-0.5" size={18} />
@@ -417,121 +337,53 @@ export function CandidateDashboardPage() {
                 <Award size={20} className="text-hurix-blue" />
                 Applicant Status
               </h2>
-              <div className="grid gap-4 sm:grid-cols-3 mb-6">
+              <div className="grid sm:grid-cols-2 gap-4 mb-6">
                 <TimelineStep done={data.timeline.registered} label="Registered" />
                 <TimelineStep done={data.timeline.emailVerified} label="Email Verified" />
-                <TimelineStep done={data.mobileVerification.phoneVerified} label="Mobile Verified" />
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div
-                  className={`rounded-lg border p-4 ${
-                    verified
-                      ? 'bg-green-50 border-green-200'
-                      : 'bg-amber-50 border-amber-200'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    {verified ? (
-                      <MailCheck className="text-green-600 shrink-0 mt-0.5" size={22} />
+              <div
+                className={`rounded-lg border p-4 ${
+                  verified
+                    ? 'bg-green-50 border-green-200'
+                    : 'bg-amber-50 border-amber-200'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  {verified ? (
+                    <MailCheck className="text-green-600 shrink-0 mt-0.5" size={22} />
+                  ) : (
+                    <Mail className="text-amber-600 shrink-0 mt-0.5" size={22} />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className={`font-semibold text-sm ${verified ? 'text-green-800' : 'text-amber-800'}`}>
+                      {verified ? 'Email Verified' : 'Email Not Verified'}
+                    </p>
+                    {verified && data.verification.verifiedAt ? (
+                      <p className="text-sm text-green-700 mt-1">
+                        Verified On: {formatDate(data.verification.verifiedAt)}
+                      </p>
                     ) : (
-                      <Mail className="text-amber-600 shrink-0 mt-0.5" size={22} />
+                      <>
+                        <p className="text-sm text-amber-700 mt-1">
+                          Verification is required before starting the assessment.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleResendVerification}
+                          disabled={resending || data.verification.resendsRemaining === 0}
+                          className="btn-primary mt-4 flex items-center gap-2 text-sm disabled:opacity-60"
+                        >
+                          {resending ? <Loader2 className="animate-spin" size={16} /> : <Mail size={16} />}
+                          Resend Verification Email
+                        </button>
+                        {data.verification.resendsRemaining === 0 && (
+                          <p className="text-xs text-amber-800 mt-2">
+                            Too many verification requests. Please try again later.
+                          </p>
+                        )}
+                      </>
                     )}
-                    <div className="flex-1 min-w-0">
-                      <p className={`font-semibold text-sm ${verified ? 'text-green-800' : 'text-amber-800'}`}>
-                        {verified ? 'Email Verified' : 'Email Not Verified'}
-                      </p>
-                      {verified && data.verification.verifiedAt ? (
-                        <p className="text-sm text-green-700 mt-1">
-                          Verified On: {formatDate(data.verification.verifiedAt)}
-                        </p>
-                      ) : (
-                        <>
-                          <p className="text-sm text-amber-700 mt-1">
-                            Verification is required before starting the assessment.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={handleResendVerification}
-                            disabled={resending || data.verification.resendsRemaining === 0}
-                            className="btn-primary mt-4 flex items-center gap-2 text-sm disabled:opacity-60"
-                          >
-                            {resending ? <Loader2 className="animate-spin" size={16} /> : <Mail size={16} />}
-                            Resend Verification Email
-                          </button>
-                          {data.verification.resendsRemaining === 0 && (
-                            <p className="text-xs text-amber-800 mt-2">
-                              Too many verification requests. Please try again later.
-                            </p>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  className={`rounded-lg border p-4 ${
-                    mobileVerified
-                      ? 'bg-green-50 border-green-200'
-                      : 'bg-amber-50 border-amber-200'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <Phone
-                      className={`${mobileVerified ? 'text-green-600' : 'text-amber-600'} shrink-0 mt-0.5`}
-                      size={22}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className={`font-semibold text-sm ${mobileVerified ? 'text-green-800' : 'text-amber-800'}`}>
-                        {mobileVerified ? 'Mobile Verified' : 'Mobile Not Verified'}
-                      </p>
-                      {mobileVerified && data.mobileVerification.verifiedAt ? (
-                        <p className="text-sm text-green-700 mt-1">
-                          Verified On: {formatDate(data.mobileVerification.verifiedAt)}
-                        </p>
-                      ) : (
-                        <>
-                          <p className="text-sm text-amber-700 mt-1">
-                            Verify {data.profile.phone} with a one-time OTP.
-                          </p>
-                          {mobileOtpRequested && (
-                            <div className="mt-4 flex gap-2">
-                              <input
-                                value={mobileOtp}
-                                onChange={(event) => setMobileOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                                className="input-field h-10 flex-1 text-sm"
-                                placeholder="Enter OTP"
-                                inputMode="numeric"
-                                maxLength={6}
-                              />
-                              <button
-                                type="button"
-                                onClick={handleVerifyMobileOtp}
-                                disabled={verifyingMobileOtp || mobileOtp.length !== 6}
-                                className="btn-primary h-10 px-4 text-sm disabled:opacity-60"
-                              >
-                                {verifyingMobileOtp ? <Loader2 className="animate-spin" size={16} /> : 'Verify'}
-                              </button>
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            onClick={handleRequestMobileOtp}
-                            disabled={requestingMobileOtp || data.mobileVerification.resendsRemaining === 0}
-                            className="btn-primary mt-4 flex items-center gap-2 text-sm disabled:opacity-60"
-                          >
-                            {requestingMobileOtp ? <Loader2 className="animate-spin" size={16} /> : <Phone size={16} />}
-                            {mobileOtpRequested || data.mobileVerification.otpSentAt ? 'Resend OTP' : 'Verify Mobile'}
-                          </button>
-                          {data.mobileVerification.resendsRemaining === 0 && (
-                            <p className="text-xs text-amber-800 mt-2">
-                              Too many OTP requests. Please try again later.
-                            </p>
-                          )}
-                        </>
-                      )}
-                    </div>
                   </div>
                 </div>
               </div>
@@ -779,35 +631,8 @@ export function CandidateDashboardPage() {
                 <p className="font-medium break-all">{data.profile.email}</p>
               </div>
               <div>
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <p className="text-hurix-gray">Phone Number</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (editingPhone) {
-                        handleSavePhone();
-                      } else {
-                        setPhoneDraft(data.profile.phone);
-                        setEditingPhone(true);
-                      }
-                    }}
-                    disabled={savingPhone || (editingPhone && phoneDraft.trim().length < 8)}
-                    className="text-xs font-semibold text-hurix-blue hover:underline disabled:opacity-60"
-                  >
-                    {savingPhone ? 'Saving...' : editingPhone ? 'Save' : <Pencil size={14} />}
-                  </button>
-                </div>
-                {editingPhone ? (
-                  <input
-                    value={phoneDraft}
-                    onChange={(event) => setPhoneDraft(event.target.value.replace(/[^\d+\s-]/g, ''))}
-                    className="w-full border-0 border-b border-slate-200 bg-transparent px-0 py-1 text-sm font-medium text-hurix-blue outline-none focus:border-hurix-blue"
-                    placeholder="+919876543210"
-                    inputMode="tel"
-                  />
-                ) : (
-                  <p className="font-medium text-hurix-blue">{data.profile.phone}</p>
-                )}
+                <p className="text-hurix-gray mb-1">Phone Number</p>
+                <p className="font-medium">{data.profile.phone}</p>
               </div>
               <div>
                 <p className="text-hurix-gray mb-1">Country</p>

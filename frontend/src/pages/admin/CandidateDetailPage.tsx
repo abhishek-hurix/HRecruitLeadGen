@@ -150,7 +150,6 @@ export function CandidateDetailPage() {
           <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Role</span><span className="text-right">{data.appliedRole || '-'}</span></div>
           <div className="flex justify-between text-xs"><span className="text-hurix-gray">Referral</span><span>{data.referralCode || '-'}</span></div>
           <div className="flex justify-between text-xs"><span className="text-hurix-gray">Email Verified</span>{verificationBadge(Boolean(data.emailVerified))}</div>
-          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Mobile Verified</span>{verificationBadge(Boolean(data.phoneVerified))}</div>
           <div className="flex justify-between text-xs"><span className="text-hurix-gray">Journey Status</span><span className="font-medium">{data.journeyStatus?.replace(/_/g, ' ') || '-'}</span></div>
           </div>
 
