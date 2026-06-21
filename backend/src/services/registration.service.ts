@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import pdfParse from 'pdf-parse';
 import { AuthProvider, ExperienceCategory } from '@prisma/client';
+import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
 import { prisma } from '../config/database';
 import { storage } from './storage/storage.service';
 import { assessmentTokenService } from './assessment-token.service';
@@ -29,6 +30,54 @@ const EXPERIENCE_BY_YEARS: Record<number, ExperienceCategory> = {
   10: ExperienceCategory.TEN_YEARS,
 };
 
+function normalizeResumeText(text: string) {
+  return text
+    .replace(/\r/g, '\n')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[|•·]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractLinkedInUrl(text: string) {
+  const compactText = text
+    .replace(/\s*([/:.?=&_-])\s*/g, '$1')
+    .replace(/\s+/g, ' ');
+  const match = compactText.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(?:in|pub)\/[a-z0-9._-]+\/?/i);
+  if (!match) return '';
+
+  const url = match[0].replace(/[),.;]+$/g, '');
+  return url.startsWith('http') ? url : `https://${url}`;
+}
+
+function extractPhone(text: string): { phoneCountryIso?: CountryCode; phoneNumber: string } {
+  const matches = text.match(/(?:\+?\d{1,3}[\s().-]*)?(?:\d[\s().-]*){10,14}/g) || [];
+
+  for (const candidate of matches) {
+    const digits = candidate.replace(/\D/g, '');
+    if (digits.length < 10 || digits.length > 15) continue;
+
+    const internationalDigits = digits.startsWith('91') && digits.length === 12
+      ? `+${digits}`
+      : candidate.trim().startsWith('+')
+        ? `+${digits}`
+        : null;
+
+    const parsed = internationalDigits
+      ? parsePhoneNumberFromString(internationalDigits)
+      : parsePhoneNumberFromString(digits.slice(-10), 'IN');
+
+    if (parsed?.isValid() && parsed.country) {
+      return {
+        phoneCountryIso: parsed.country,
+        phoneNumber: parsed.nationalNumber,
+      };
+    }
+  }
+
+  return { phoneNumber: '' };
+}
+
 export interface RegistrationData {
   fullName: string;
   email: string;
@@ -46,19 +95,17 @@ export class RegistrationService {
   async parseResume(resumeFile: Express.Multer.File) {
     const parsed = await pdfParse(resumeFile.buffer);
     const text = parsed.text.replace(/\r/g, '\n');
+    const normalizedText = normalizeResumeText(text);
     const lines = text
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean);
 
-    const email = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || '';
-    const linkedinUrl = text.match(/https?:\/\/(?:www\.)?linkedin\.com\/(?:in|pub)\/[^\s)]+/i)?.[0] || '';
-    const phoneMatch = text.match(/(?:\+?91[\s-]?)?[6-9]\d[\d\s-]{8,12}/);
-    const rawPhone = phoneMatch?.[0]?.replace(/[^\d+]/g, '') || '';
-    const phoneCountryIso = rawPhone.startsWith('+91') || rawPhone.startsWith('91') ? 'IN' : undefined;
-    const phoneNumber = rawPhone.replace(/^\+?91/, '').replace(/\D/g, '').slice(-10);
+    const email = normalizedText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || '';
+    const linkedinUrl = extractLinkedInUrl(text);
+    const { phoneCountryIso, phoneNumber } = extractPhone(text);
 
-    const experienceText = text.match(/(\d{1,2})(?:\+)?\s*(?:years?|yrs?)\s+(?:of\s+)?experience/i)?.[1];
+    const experienceText = normalizedText.match(/(\d{1,2})(?:\+)?\s*(?:years?|yrs?)\s+(?:of\s+)?experience/i)?.[1];
     const years = experienceText ? Math.min(parseInt(experienceText, 10), 10) : null;
     const experienceCategory = years === null
       ? (/\bfresher\b/i.test(text) ? ExperienceCategory.FRESHER : '')

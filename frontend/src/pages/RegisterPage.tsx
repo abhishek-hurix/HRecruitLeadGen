@@ -51,18 +51,27 @@ export function RegisterPage() {
       return;
     }
 
+    setForm((current) => ({
+      ...current,
+      fullName: '',
+      email: prefilledEmail,
+      linkedinUrl: '',
+      experienceCategory: '',
+    }));
+    setCountryIso(DEFAULT_COUNTRY_ISO);
+    setPhoneNumber('');
     setParsingResume(true);
     try {
       const parsed = await parseResume(file);
       setForm((current) => ({
         ...current,
-        fullName: parsed.fullName || current.fullName,
-        email: parsed.email || current.email,
-        linkedinUrl: parsed.linkedinUrl || current.linkedinUrl,
-        experienceCategory: parsed.experienceCategory || current.experienceCategory,
+        fullName: parsed.fullName || '',
+        email: parsed.email || prefilledEmail,
+        linkedinUrl: parsed.linkedinUrl || '',
+        experienceCategory: parsed.experienceCategory || '',
       }));
-      if (parsed.phoneCountryIso) setCountryIso(parsed.phoneCountryIso as CountryCode);
-      if (parsed.phoneNumber) setPhoneNumber(parsed.phoneNumber);
+      setCountryIso((parsed.phoneCountryIso as CountryCode) || DEFAULT_COUNTRY_ISO);
+      setPhoneNumber(parsed.phoneNumber || '');
       setParseNotice('We auto-filled the details we could find. Please review everything before submitting.');
     } catch {
       setParseNotice('CV uploaded. We could not auto-fill details, so please complete the form manually.');
