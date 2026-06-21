@@ -74,6 +74,11 @@ export async function getResumePreviewUrl(id: string) {
   return window.URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
 }
 
+export async function getCandidateResumePreviewUrl(candidateId: string, resumeId: string) {
+  const { data } = await api.get(`/admin/candidates/${candidateId}/resumes/${resumeId}`, { responseType: 'blob' });
+  return window.URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
+}
+
 export async function exportCandidatesCSV() {
   const { data } = await api.get('/admin/candidates/export', { responseType: 'blob' });
   const url = window.URL.createObjectURL(new Blob([data]));

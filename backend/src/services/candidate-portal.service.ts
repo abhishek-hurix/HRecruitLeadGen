@@ -3,6 +3,8 @@ import { prisma } from '../config/database';
 import { AppError } from '../utils/errors';
 import { assessmentTokenService } from './assessment-token.service';
 import { getExperienceLabel } from '../utils/experience';
+import { storage } from './storage/storage.service';
+import { getCountryIsoByName, parseAndValidatePhoneInput } from '../utils/phone';
 
 export class CandidatePortalService {
   async getDashboard(candidateId: string) {
@@ -28,6 +30,7 @@ export class CandidatePortalService {
             answers: true,
           },
         },
+        resumes: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }] },
       },
     });
 
@@ -92,6 +95,14 @@ export class CandidatePortalService {
 
     const passedTests = latestSubmission?.answers.reduce((sum, a) => sum + a.passedTests, 0) ?? 0;
     const failedTests = latestSubmission?.answers.reduce((sum, a) => sum + a.failedTests, 0) ?? 0;
+    const mobileVerificationAttempts = (() => {
+      const windowStart = candidate.phoneVerificationAttemptsWindowStart;
+      const now = Date.now();
+      if (!windowStart || now - windowStart.getTime() >= 60 * 60 * 1000) {
+        return 0;
+      }
+      return candidate.phoneVerificationAttempts;
+    })();
 
     const timeline = {
       registered: true,
@@ -125,6 +136,20 @@ export class CandidatePortalService {
       result: Number(s.score) >= 5 ? 'Passed' : 'Needs Review',
     }));
 
+    const resumes = candidate.resumes.length > 0
+      ? candidate.resumes
+      : candidate.resumePath
+        ? [{
+            id: 'legacy-primary-resume',
+            candidateId: candidate.id,
+            fileName: `${candidate.fullName.replace(/\s+/g, '_')}_resume.pdf`,
+            filePath: candidate.resumePath,
+            isPrimary: true,
+            createdAt: candidate.createdAt,
+            updatedAt: candidate.updatedAt,
+          }]
+        : [];
+
     return {
       profile: {
         fullName: candidate.fullName,
@@ -138,7 +163,13 @@ export class CandidatePortalService {
         experienceLabel: getExperienceLabel(candidate.experienceCategory),
         linkedinUrl: candidate.linkedinUrl,
         referralCode: candidate.referralCode,
-        resumeUploaded: Boolean(candidate.resumePath),
+        resumeUploaded: resumes.length > 0,
+        resumes: resumes.map((resume) => ({
+          id: resume.id,
+          fileName: resume.fileName,
+          isPrimary: resume.isPrimary,
+          uploadedAt: resume.createdAt,
+        })),
       },
       appliedPosition: selectedProfile.selectedRoleId
         ? {
@@ -171,6 +202,13 @@ export class CandidatePortalService {
         ),
         canResend: !candidate.emailVerified,
       },
+      mobileVerification: {
+        phoneVerified: candidate.phoneVerified,
+        verifiedAt: candidate.phoneVerifiedAt,
+        otpSentAt: candidate.phoneOtpSentAt,
+        resendsRemaining: Math.max(0, 3 - mobileVerificationAttempts),
+        canResend: !candidate.phoneVerified && mobileVerificationAttempts < 3,
+      },
       timeline,
       assessment: {
         status: inProgressAssessment
@@ -187,6 +225,159 @@ export class CandidatePortalService {
       },
       journeyStatus,
       history,
+    };
+  }
+
+  async uploadResume(candidateId: string, resumeFile: Express.Multer.File) {
+    const candidate = await prisma.candidateProfile.findUnique({
+      where: { id: candidateId },
+      include: { resumes: true },
+    });
+    if (!candidate) throw new AppError(404, 'Candidate not found');
+
+    const filePath = await storage.save(resumeFile, 'resumes');
+    const shouldBePrimary = candidate.resumes.length === 0 && !candidate.resumePath;
+
+    try {
+      const resume = await prisma.$transaction(async (tx) => {
+        const created = await tx.candidateResume.create({
+          data: {
+            candidateId,
+            fileName: resumeFile.originalname || 'resume.pdf',
+            filePath,
+            isPrimary: shouldBePrimary,
+          },
+        });
+
+        if (shouldBePrimary) {
+          await tx.candidateProfile.update({
+            where: { id: candidateId },
+            data: { resumePath: filePath },
+          });
+        }
+
+        return created;
+      });
+
+      return {
+        id: resume.id,
+        fileName: resume.fileName,
+        isPrimary: resume.isPrimary,
+        uploadedAt: resume.createdAt,
+      };
+    } catch (error) {
+      await storage.delete(filePath).catch(() => {});
+      throw error;
+    }
+  }
+
+  async setPrimaryResume(candidateId: string, resumeId: string) {
+    const resume = await prisma.candidateResume.findFirst({
+      where: { id: resumeId, candidateId },
+    });
+    if (!resume) throw new AppError(404, 'Resume not found');
+
+    await prisma.$transaction(async (tx) => {
+      await tx.candidateResume.updateMany({
+        where: { candidateId },
+        data: { isPrimary: false },
+      });
+      await tx.candidateResume.update({
+        where: { id: resume.id },
+        data: { isPrimary: true },
+      });
+      await tx.candidateProfile.update({
+        where: { id: candidateId },
+        data: { resumePath: resume.filePath },
+      });
+    });
+
+    return { resumeId: resume.id };
+  }
+
+  async getResume(candidateId: string, resumeId: string) {
+    const resume = await prisma.candidateResume.findFirst({
+      where: { id: resumeId, candidateId },
+    });
+    if (!resume) throw new AppError(404, 'Resume not found');
+
+    const buffer = await storage.get(resume.filePath);
+    return { buffer, filename: resume.fileName };
+  }
+
+  async deleteResume(candidateId: string, resumeId: string) {
+    const resumes = await prisma.candidateResume.findMany({
+      where: { candidateId },
+      orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
+    });
+    const resume = resumes.find((item) => item.id === resumeId);
+    if (!resume) throw new AppError(404, 'Resume not found');
+    if (resumes.length <= 1) {
+      throw new AppError(400, 'At least one resume is required.');
+    }
+
+    const nextPrimary = resume.isPrimary
+      ? resumes.find((item) => item.id !== resumeId)
+      : null;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.candidateResume.delete({ where: { id: resume.id } });
+
+      if (nextPrimary) {
+        await tx.candidateResume.updateMany({
+          where: { candidateId },
+          data: { isPrimary: false },
+        });
+        await tx.candidateResume.update({
+          where: { id: nextPrimary.id },
+          data: { isPrimary: true },
+        });
+        await tx.candidateProfile.update({
+          where: { id: candidateId },
+          data: { resumePath: nextPrimary.filePath },
+        });
+      }
+    });
+
+    await storage.delete(resume.filePath).catch(() => {});
+    return { deletedResumeId: resume.id, primaryResumeId: nextPrimary?.id || resumes.find((item) => item.isPrimary)?.id || null };
+  }
+
+  async updatePhone(candidateId: string, phoneInput: string) {
+    const candidate = await prisma.candidateProfile.findUnique({ where: { id: candidateId } });
+    if (!candidate) throw new AppError(404, 'Candidate not found');
+
+    const countryIso = getCountryIsoByName(candidate.phoneCountry) || 'IN';
+    const parsedPhone = parseAndValidatePhoneInput(countryIso, phoneInput);
+    const phoneChanged = (candidate.fullPhone || candidate.phone) !== parsedPhone.fullPhone;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.mobileVerificationOtp.updateMany({
+        where: { candidateId, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+
+      return tx.candidateProfile.update({
+        where: { id: candidateId },
+        data: {
+          phone: parsedPhone.phoneNumber,
+          countryCode: parsedPhone.countryCode,
+          phoneNumber: parsedPhone.phoneNumber,
+          fullPhone: parsedPhone.fullPhone,
+          phoneCountry: parsedPhone.phoneCountry,
+          phoneVerified: phoneChanged ? false : candidate.phoneVerified,
+          phoneVerifiedAt: phoneChanged ? null : candidate.phoneVerifiedAt,
+          phoneOtpSentAt: null,
+        },
+      });
+    });
+
+    return {
+      phone: updated.fullPhone || updated.phone,
+      phoneNumber: updated.phoneNumber || updated.phone,
+      countryCode: updated.countryCode,
+      phoneCountry: updated.phoneCountry,
+      phoneVerified: updated.phoneVerified,
     };
   }
 }

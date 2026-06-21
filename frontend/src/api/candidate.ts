@@ -29,6 +29,64 @@ export async function resendVerificationEmail(): Promise<{ message: string }> {
   return data;
 }
 
+export async function requestMobileOtp(): Promise<{
+  message: string;
+  otpSentAt: string;
+  resendsRemaining: number;
+  devOtp?: string;
+}> {
+  const { data } = await api.post('/candidate/mobile/request-otp');
+  return data.data;
+}
+
+export async function verifyMobileOtp(otp: string): Promise<{
+  phoneVerified: boolean;
+  verifiedAt: string;
+}> {
+  const { data } = await api.post('/candidate/mobile/verify-otp', { otp });
+  return data.data;
+}
+
+export async function updateCandidatePhone(phone: string): Promise<{
+  phone: string;
+  phoneNumber: string;
+  countryCode: string;
+  phoneCountry: string;
+  phoneVerified: boolean;
+}> {
+  const { data } = await api.patch('/candidate/phone', { phone });
+  return data.data;
+}
+
+export async function uploadCandidateResume(file: File) {
+  const formData = new FormData();
+  formData.append('resume', file);
+  const { data } = await api.post('/candidate/resumes', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data.data as {
+    id: string;
+    fileName: string;
+    isPrimary: boolean;
+    uploadedAt: string;
+  };
+}
+
+export async function setPrimaryCandidateResume(resumeId: string) {
+  const { data } = await api.patch('/candidate/resumes/primary', { resumeId });
+  return data.data as { resumeId: string };
+}
+
+export async function getCandidateResumePreviewUrl(resumeId: string) {
+  const { data } = await api.get(`/candidate/resumes/${resumeId}`, { responseType: 'blob' });
+  return window.URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
+}
+
+export async function deleteCandidateResume(resumeId: string) {
+  const { data } = await api.delete(`/candidate/resumes/${resumeId}`);
+  return data.data as { deletedResumeId: string; primaryResumeId: string | null };
+}
+
 export async function getVerificationStatus(): Promise<{
   emailVerified: boolean;
   verifiedAt: string | null;

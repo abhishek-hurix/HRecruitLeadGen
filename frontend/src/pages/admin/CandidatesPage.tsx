@@ -243,17 +243,17 @@ export function CandidatesPage() {
       <div className="hidden lg:block card-premium overflow-hidden p-0">
         <table className="w-full table-fixed text-xs">
           <colgroup>
-            <col className="w-[7%]" />
-            <col className="w-[9%]" />
-            <col className="w-[14%]" />
-            <col className="w-[13%]" />
-            <col className="w-[8%]" />
-            <col className="w-[9%]" />
-            <col className="w-[12%]" />
-            <col className="w-[10%]" />
             <col className="w-[6%]" />
+            <col className="w-[9%]" />
+            <col className="w-[13%]" />
+            <col className="w-[13%]" />
+            <col className="w-[7%]" />
             <col className="w-[8%]" />
-            <col className="w-[4%]" />
+            <col className="w-[12%]" />
+            <col className="w-[9%]" />
+            <col className="w-[5%]" />
+            <col className="w-[8%]" />
+            <col className="w-[10%]" />
           </colgroup>
           <thead className="bg-slate-50 border-b">
             <tr>
@@ -289,12 +289,12 @@ export function CandidatesPage() {
                   <td className="px-2 py-2.5">{c.score !== null ? `${c.score}/10` : '—'}</td>
                   <td className="truncate px-2 py-2.5 text-hurix-gray">{formatDate(c.createdAt)}</td>
                   <td className="px-2 py-2.5">
-                    <div className="flex flex-col gap-0.5">
+                    <div className="flex min-w-0 flex-col gap-0.5 text-[11px]">
                       <Link to={`/admin/candidates/${c.id}?view=profile`} className="text-hurix-blue hover:underline">View</Link>
                       <button onClick={() => openResumePreview(c.id, c.fullName)} className="text-left text-hurix-blue hover:underline" disabled={loadingResumeId === c.id}>
                         {loadingResumeId === c.id ? 'Opening...' : 'Resume'}
                       </button>
-                      <Link to={`/admin/candidates/${c.id}?view=assessment`} className="text-hurix-blue hover:underline"><ClipboardList size={12} /></Link>
+                      <Link to={`/admin/candidates/${c.id}?view=assessment`} className="inline-flex items-center gap-1 text-hurix-blue hover:underline"><ClipboardList size={11} /> Test</Link>
                     </div>
                   </td>
                 </tr>

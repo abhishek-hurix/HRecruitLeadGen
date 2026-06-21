@@ -49,3 +49,17 @@ export async function register(req: AuthRequest, res: Response, next: NextFuncti
     next(error);
   }
 }
+
+export async function parseResume(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const resume = req.file;
+    if (!resume) {
+      return res.status(400).json({ success: false, message: 'Resume PDF is required' });
+    }
+
+    const parsed = await registrationService.parseResume(resume);
+    res.json({ success: true, data: parsed });
+  } catch (error) {
+    next(error);
+  }
+}

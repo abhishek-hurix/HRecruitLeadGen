@@ -37,6 +37,13 @@ export function buildCountryList(): CountryOption[] {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export function getCountryNameFromDialCode(dialCode: string): string | null {
+  const normalizedDialCode = dialCode.trim();
+  if (!normalizedDialCode) return null;
+
+  return buildCountryList().find((country) => country.dialCode === normalizedDialCode)?.name || null;
+}
+
 export const DEFAULT_COUNTRY_ISO: CountryCode = 'IN';
 
 export function isValidNationalPhone(iso: CountryCode, nationalNumber: string): boolean {

@@ -91,11 +91,24 @@ export interface CandidateDashboard {
     linkedinUrl: string;
     referralCode: string | null;
     resumeUploaded: boolean;
+    resumes: Array<{
+      id: string;
+      fileName: string;
+      isPrimary: boolean;
+      uploadedAt: string;
+    }>;
   };
   verification: {
     emailVerified: boolean;
     verifiedAt: string | null;
     verificationSentAt: string | null;
+    resendsRemaining: number;
+    canResend: boolean;
+  };
+  mobileVerification: {
+    phoneVerified: boolean;
+    verifiedAt: string | null;
+    otpSentAt: string | null;
     resendsRemaining: number;
     canResend: boolean;
   };

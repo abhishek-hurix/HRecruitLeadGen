@@ -74,6 +74,20 @@ export async function downloadResume(req: AuthRequest, res: Response, next: Next
   }
 }
 
+export async function downloadCandidateResume(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { buffer, filename } = await adminService.getCandidateResume(
+      String(req.params.id),
+      String(req.params.resumeId)
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function exportCSV(_req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const csv = await adminService.exportCandidatesCSV();

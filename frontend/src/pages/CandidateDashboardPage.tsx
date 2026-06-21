@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -7,22 +7,40 @@ import {
   Loader2,
   Play,
   FileText,
+  Upload,
   Award,
   User,
   Mail,
   MailCheck,
+  Phone,
+  Pencil,
   AlertCircle,
   Briefcase,
   MapPin,
   DollarSign,
+  Trash2,
 } from 'lucide-react';
+import { ResumePreviewModal } from '../components/admin/ResumePreviewModal';
 import { CandidateLayout } from '../components/layout/CandidateLayout';
-import { getCandidateDashboard, getAssessmentAccessToken, getCandidateJobRoles, resendVerificationEmail } from '../api/candidate';
+import {
+  deleteCandidateResume,
+  getCandidateDashboard,
+  getAssessmentAccessToken,
+  getCandidateJobRoles,
+  getCandidateResumePreviewUrl,
+  requestMobileOtp,
+  resendVerificationEmail,
+  setPrimaryCandidateResume,
+  uploadCandidateResume,
+  updateCandidatePhone,
+  verifyMobileOtp,
+} from '../api/candidate';
 import { initSessionAuth, selectRoleAndStart } from '../api/assessment';
 import { clearCandidateToken, getCandidateToken, setCandidateToken } from '../api/client';
 import { getApiErrorMessage, isLinkExpiredError, getApiErrorStatus } from '../utils/apiErrors';
+import { getCountryNameFromDialCode } from '../utils/countries';
 import { isMobilePhone } from '../utils/device';
-import { formatDate } from '../utils/validation';
+import { formatDate, isPdfFile } from '../utils/validation';
 
 function TimelineStep({ done, label }: { done: boolean; label: string }) {
   return (
@@ -52,6 +70,22 @@ export function CandidateDashboardPage() {
   const [resending, setResending] = useState(false);
   const [actionError, setActionError] = useState('');
   const [resendSuccess, setResendSuccess] = useState(false);
+  const [mobileSuccess, setMobileSuccess] = useState('');
+  const [mobileOtp, setMobileOtp] = useState('');
+  const [mobileOtpRequested, setMobileOtpRequested] = useState(false);
+  const [requestingMobileOtp, setRequestingMobileOtp] = useState(false);
+  const [verifyingMobileOtp, setVerifyingMobileOtp] = useState(false);
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneDraft, setPhoneDraft] = useState('');
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [primaryResumeMode, setPrimaryResumeMode] = useState(false);
+  const [selectedPrimaryResumeId, setSelectedPrimaryResumeId] = useState('');
+  const [savingPrimaryResume, setSavingPrimaryResume] = useState(false);
+  const [resumePreview, setResumePreview] = useState<{ url: string; filename: string } | null>(null);
+  const [openingResumeId, setOpeningResumeId] = useState<string | null>(null);
+  const [deletingResumeId, setDeletingResumeId] = useState<string | null>(null);
+  const resumeInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['candidate-dashboard'],
@@ -79,6 +113,25 @@ export function CandidateDashboardPage() {
     }
   }, [error, navigate]);
 
+  useEffect(() => {
+    const primaryResume = data?.profile.resumes.find((resume) => resume.isPrimary);
+    if (primaryResume && !primaryResumeMode) {
+      setSelectedPrimaryResumeId(primaryResume.id);
+    }
+  }, [data?.profile.resumes, primaryResumeMode]);
+
+  useEffect(() => () => {
+    if (resumePreview) {
+      window.URL.revokeObjectURL(resumePreview.url);
+    }
+  }, [resumePreview]);
+
+  useEffect(() => {
+    if (data?.profile.phone && !editingPhone) {
+      setPhoneDraft(data.profile.phone);
+    }
+  }, [data?.profile.phone, editingPhone]);
+
   const handleResendVerification = async () => {
     setResending(true);
     setActionError('');
@@ -94,6 +147,59 @@ export function CandidateDashboardPage() {
       }
     } finally {
       setResending(false);
+    }
+  };
+
+  const handleRequestMobileOtp = async () => {
+    setRequestingMobileOtp(true);
+    setActionError('');
+    setMobileSuccess('');
+    try {
+      const result = await requestMobileOtp();
+      setMobileOtpRequested(true);
+      setMobileOtp('');
+      setMobileSuccess(result.devOtp ? `OTP sent. Dev OTP: ${result.devOtp}` : result.message);
+      await queryClient.invalidateQueries({ queryKey: ['candidate-dashboard'] });
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Failed to send OTP.'));
+    } finally {
+      setRequestingMobileOtp(false);
+    }
+  };
+
+  const handleVerifyMobileOtp = async () => {
+    setVerifyingMobileOtp(true);
+    setActionError('');
+    setMobileSuccess('');
+    try {
+      await verifyMobileOtp(mobileOtp);
+      setMobileOtp('');
+      setMobileOtpRequested(false);
+      setMobileSuccess('Mobile number verified successfully.');
+      await queryClient.invalidateQueries({ queryKey: ['candidate-dashboard'] });
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Invalid or expired OTP.'));
+    } finally {
+      setVerifyingMobileOtp(false);
+    }
+  };
+
+  const handleSavePhone = async () => {
+    setSavingPhone(true);
+    setActionError('');
+    setMobileSuccess('');
+    try {
+      const result = await updateCandidatePhone(phoneDraft);
+      setPhoneDraft(result.phone);
+      setEditingPhone(false);
+      setMobileOtp('');
+      setMobileOtpRequested(false);
+      setMobileSuccess('Mobile number updated. Please verify the new number with OTP.');
+      await queryClient.invalidateQueries({ queryKey: ['candidate-dashboard'] });
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Failed to update mobile number.'));
+    } finally {
+      setSavingPhone(false);
     }
   };
 
@@ -137,6 +243,96 @@ export function CandidateDashboardPage() {
     }
   };
 
+  const handleUploadResume = async (file: File | null) => {
+    if (!file) return;
+    setActionError('');
+
+    if (!isPdfFile(file)) {
+      setActionError('Only PDF resume files are allowed.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setActionError('Resume file size must be 5MB or less.');
+      return;
+    }
+
+    setUploadingResume(true);
+    try {
+      await uploadCandidateResume(file);
+      await queryClient.invalidateQueries({ queryKey: ['candidate-dashboard'] });
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Failed to upload resume.'));
+    } finally {
+      setUploadingResume(false);
+      if (resumeInputRef.current) resumeInputRef.current.value = '';
+    }
+  };
+
+  const handleStartPrimaryResumeMode = () => {
+    const primaryResume = data?.profile.resumes.find((resume) => resume.isPrimary);
+    const firstResume = data?.profile.resumes[0];
+    setSelectedPrimaryResumeId(primaryResume?.id || firstResume?.id || '');
+    setPrimaryResumeMode(true);
+  };
+
+  const handleSavePrimaryResume = async () => {
+    if (!selectedPrimaryResumeId) return;
+
+    setSavingPrimaryResume(true);
+    setActionError('');
+    try {
+      await setPrimaryCandidateResume(selectedPrimaryResumeId);
+      await queryClient.invalidateQueries({ queryKey: ['candidate-dashboard'] });
+      setPrimaryResumeMode(false);
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Failed to set primary resume.'));
+    } finally {
+      setSavingPrimaryResume(false);
+    }
+  };
+
+  const closeResumePreview = () => {
+    if (resumePreview) {
+      window.URL.revokeObjectURL(resumePreview.url);
+    }
+    setResumePreview(null);
+  };
+
+  const openResumePreview = async (resumeId: string, filename: string) => {
+    setOpeningResumeId(resumeId);
+    setActionError('');
+    try {
+      const url = await getCandidateResumePreviewUrl(resumeId);
+      setResumePreview({ url, filename });
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Failed to open resume.'));
+    } finally {
+      setOpeningResumeId(null);
+    }
+  };
+
+  const handleDeleteResume = async (resumeId: string) => {
+    if (resumes.length <= 1) {
+      setActionError('At least one resume is required.');
+      return;
+    }
+
+    setDeletingResumeId(resumeId);
+    setActionError('');
+    try {
+      await deleteCandidateResume(resumeId);
+      await queryClient.invalidateQueries({ queryKey: ['candidate-dashboard'] });
+      if (selectedPrimaryResumeId === resumeId) {
+        setSelectedPrimaryResumeId('');
+      }
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Failed to delete resume.'));
+    } finally {
+      setDeletingResumeId(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-hurix-light">
@@ -160,6 +356,7 @@ export function CandidateDashboardPage() {
 
   const mobileBlocked = isMobilePhone();
   const verified = data.verification.emailVerified;
+  const mobileVerified = data.mobileVerification.phoneVerified;
   const hasSubmittedAssessment = data.assessment.hasCompleted || data.history.length > 0;
   const completedRoleIds = new Set(data.history.map((item) => item.jobRoleId).filter(Boolean));
   const completedRoleNames = new Set(
@@ -176,6 +373,8 @@ export function CandidateDashboardPage() {
     !completedRoleIds.has(role.id) &&
     !completedRoleNames.has(role.title.trim().toLowerCase())
   ));
+  const profileCountry = data.profile.phoneCountry || getCountryNameFromDialCode(data.profile.countryCode) || '—';
+  const resumes = data.profile.resumes || [];
 
   return (
     <CandidateLayout candidateName={data.profile.fullName} onLogout={() => navigate('/')}>
@@ -197,6 +396,13 @@ export function CandidateDashboardPage() {
           </div>
         )}
 
+        {mobileSuccess && (
+          <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm flex items-start gap-2">
+            <Phone className="shrink-0 mt-0.5" size={18} />
+            <span>{mobileSuccess}</span>
+          </div>
+        )}
+
         {actionError && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-start gap-2">
             <AlertCircle className="shrink-0 mt-0.5" size={18} />
@@ -211,61 +417,121 @@ export function CandidateDashboardPage() {
                 <Award size={20} className="text-hurix-blue" />
                 Applicant Status
               </h2>
-              <div className="grid sm:grid-cols-2 gap-4 mb-6">
+              <div className="grid gap-4 sm:grid-cols-3 mb-6">
                 <TimelineStep done={data.timeline.registered} label="Registered" />
                 <TimelineStep done={data.timeline.emailVerified} label="Email Verified" />
+                <TimelineStep done={data.mobileVerification.phoneVerified} label="Mobile Verified" />
               </div>
 
-              <div
-                className={`rounded-lg border p-4 ${
-                  verified
-                    ? 'bg-green-50 border-green-200'
-                    : 'bg-amber-50 border-amber-200'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  {verified ? (
-                    <MailCheck className="text-green-600 shrink-0 mt-0.5" size={22} />
-                  ) : (
-                    <Mail className="text-amber-600 shrink-0 mt-0.5" size={22} />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={`font-semibold text-sm ${
-                        verified ? 'text-green-800' : 'text-amber-800'
-                      }`}
-                    >
-                      {verified ? 'Email Verified' : 'Email Not Verified'}
-                    </p>
-                    {verified && data.verification.verifiedAt ? (
-                      <p className="text-sm text-green-700 mt-1">
-                        Verified On: {formatDate(data.verification.verifiedAt)}
-                      </p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div
+                  className={`rounded-lg border p-4 ${
+                    verified
+                      ? 'bg-green-50 border-green-200'
+                      : 'bg-amber-50 border-amber-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    {verified ? (
+                      <MailCheck className="text-green-600 shrink-0 mt-0.5" size={22} />
                     ) : (
-                      <>
-                        <p className="text-sm text-amber-700 mt-1">
-                          Verification is required before starting the assessment.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={handleResendVerification}
-                          disabled={resending || data.verification.resendsRemaining === 0}
-                          className="btn-primary mt-4 flex items-center gap-2 text-sm disabled:opacity-60"
-                        >
-                          {resending ? (
-                            <Loader2 className="animate-spin" size={16} />
-                          ) : (
-                            <Mail size={16} />
-                          )}
-                          Resend Verification Email
-                        </button>
-                        {data.verification.resendsRemaining === 0 && (
-                          <p className="text-xs text-amber-800 mt-2">
-                            Too many verification requests. Please try again later.
-                          </p>
-                        )}
-                      </>
+                      <Mail className="text-amber-600 shrink-0 mt-0.5" size={22} />
                     )}
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-semibold text-sm ${verified ? 'text-green-800' : 'text-amber-800'}`}>
+                        {verified ? 'Email Verified' : 'Email Not Verified'}
+                      </p>
+                      {verified && data.verification.verifiedAt ? (
+                        <p className="text-sm text-green-700 mt-1">
+                          Verified On: {formatDate(data.verification.verifiedAt)}
+                        </p>
+                      ) : (
+                        <>
+                          <p className="text-sm text-amber-700 mt-1">
+                            Verification is required before starting the assessment.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleResendVerification}
+                            disabled={resending || data.verification.resendsRemaining === 0}
+                            className="btn-primary mt-4 flex items-center gap-2 text-sm disabled:opacity-60"
+                          >
+                            {resending ? <Loader2 className="animate-spin" size={16} /> : <Mail size={16} />}
+                            Resend Verification Email
+                          </button>
+                          {data.verification.resendsRemaining === 0 && (
+                            <p className="text-xs text-amber-800 mt-2">
+                              Too many verification requests. Please try again later.
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  className={`rounded-lg border p-4 ${
+                    mobileVerified
+                      ? 'bg-green-50 border-green-200'
+                      : 'bg-amber-50 border-amber-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <Phone
+                      className={`${mobileVerified ? 'text-green-600' : 'text-amber-600'} shrink-0 mt-0.5`}
+                      size={22}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-semibold text-sm ${mobileVerified ? 'text-green-800' : 'text-amber-800'}`}>
+                        {mobileVerified ? 'Mobile Verified' : 'Mobile Not Verified'}
+                      </p>
+                      {mobileVerified && data.mobileVerification.verifiedAt ? (
+                        <p className="text-sm text-green-700 mt-1">
+                          Verified On: {formatDate(data.mobileVerification.verifiedAt)}
+                        </p>
+                      ) : (
+                        <>
+                          <p className="text-sm text-amber-700 mt-1">
+                            Verify {data.profile.phone} with a one-time OTP.
+                          </p>
+                          {mobileOtpRequested && (
+                            <div className="mt-4 flex gap-2">
+                              <input
+                                value={mobileOtp}
+                                onChange={(event) => setMobileOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                                className="input-field h-10 flex-1 text-sm"
+                                placeholder="Enter OTP"
+                                inputMode="numeric"
+                                maxLength={6}
+                              />
+                              <button
+                                type="button"
+                                onClick={handleVerifyMobileOtp}
+                                disabled={verifyingMobileOtp || mobileOtp.length !== 6}
+                                className="btn-primary h-10 px-4 text-sm disabled:opacity-60"
+                              >
+                                {verifyingMobileOtp ? <Loader2 className="animate-spin" size={16} /> : 'Verify'}
+                              </button>
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={handleRequestMobileOtp}
+                            disabled={requestingMobileOtp || data.mobileVerification.resendsRemaining === 0}
+                            className="btn-primary mt-4 flex items-center gap-2 text-sm disabled:opacity-60"
+                          >
+                            {requestingMobileOtp ? <Loader2 className="animate-spin" size={16} /> : <Phone size={16} />}
+                            {mobileOtpRequested || data.mobileVerification.otpSentAt ? 'Resend OTP' : 'Verify Mobile'}
+                          </button>
+                          {data.mobileVerification.resendsRemaining === 0 && (
+                            <p className="text-xs text-amber-800 mt-2">
+                              Too many OTP requests. Please try again later.
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -513,12 +779,39 @@ export function CandidateDashboardPage() {
                 <p className="font-medium break-all">{data.profile.email}</p>
               </div>
               <div>
-                <p className="text-hurix-gray mb-1">Phone Number</p>
-                <p className="font-medium">{data.profile.phone}</p>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="text-hurix-gray">Phone Number</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editingPhone) {
+                        handleSavePhone();
+                      } else {
+                        setPhoneDraft(data.profile.phone);
+                        setEditingPhone(true);
+                      }
+                    }}
+                    disabled={savingPhone || (editingPhone && phoneDraft.trim().length < 8)}
+                    className="text-xs font-semibold text-hurix-blue hover:underline disabled:opacity-60"
+                  >
+                    {savingPhone ? 'Saving...' : editingPhone ? 'Save' : <Pencil size={14} />}
+                  </button>
+                </div>
+                {editingPhone ? (
+                  <input
+                    value={phoneDraft}
+                    onChange={(event) => setPhoneDraft(event.target.value.replace(/[^\d+\s-]/g, ''))}
+                    className="w-full border-0 border-b border-slate-200 bg-transparent px-0 py-1 text-sm font-medium text-hurix-blue outline-none focus:border-hurix-blue"
+                    placeholder="+919876543210"
+                    inputMode="tel"
+                  />
+                ) : (
+                  <p className="font-medium text-hurix-blue">{data.profile.phone}</p>
+                )}
               </div>
               <div>
-                <p className="text-hurix-gray mb-1">Country Code</p>
-                <p className="font-medium">{data.profile.countryCode} ({data.profile.phoneCountry})</p>
+                <p className="text-hurix-gray mb-1">Country</p>
+                <p className="font-medium">{profileCountry}</p>
               </div>
               <div>
                 <p className="text-hurix-gray mb-1">Years of Experience</p>
@@ -539,16 +832,129 @@ export function CandidateDashboardPage() {
                 <p className="text-hurix-gray mb-1">Referral Code</p>
                 <p className="font-medium">{data.profile.referralCode || '—'}</p>
               </div>
-              <div>
-                <p className="text-hurix-gray mb-1">Resume Status</p>
-                <p className="font-medium">
-                  {data.profile.resumeUploaded ? 'Uploaded' : 'Not Uploaded'}
-                </p>
+              <div className="border-t border-slate-100 pt-4">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold text-hurix-charcoal">Resume</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      ref={resumeInputRef}
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      className="hidden"
+                      onChange={(event) => handleUploadResume(event.target.files?.[0] || null)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => resumeInputRef.current?.click()}
+                      disabled={uploadingResume || savingPrimaryResume}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-black/10 bg-white/80 px-3 py-2 text-[11px] font-semibold text-slate-950 shadow-sm backdrop-blur hover:bg-white disabled:opacity-60"
+                    >
+                      {uploadingResume ? <Loader2 className="animate-spin" size={13} /> : <Upload size={13} />}
+                      Upload More
+                    </button>
+                    {resumes.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={primaryResumeMode ? handleSavePrimaryResume : handleStartPrimaryResumeMode}
+                        disabled={savingPrimaryResume || uploadingResume || (primaryResumeMode && !selectedPrimaryResumeId)}
+                        className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[11px] font-semibold shadow-sm backdrop-blur disabled:opacity-60 ${
+                          primaryResumeMode
+                            ? 'bg-black text-white hover:bg-slate-900'
+                            : 'border border-black/10 bg-white/80 text-slate-950 hover:bg-white'
+                        }`}
+                      >
+                        {savingPrimaryResume ? <Loader2 className="animate-spin" size={13} /> : null}
+                        {primaryResumeMode ? 'Save' : 'Set Primary'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {resumes.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-4 text-center text-xs text-hurix-gray">
+                    No resume uploaded yet.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {resumes.map((resume) => (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        key={resume.id}
+                        onClick={() => openResumePreview(resume.id, resume.fileName)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            openResumePreview(resume.id, resume.fileName);
+                          }
+                        }}
+                        className={`relative rounded-2xl border p-3 text-center shadow-sm transition hover:-translate-y-0.5 hover:bg-white ${
+                          resume.isPrimary
+                            ? 'border-black/20 bg-white'
+                            : 'border-slate-100 bg-white/70'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDeleteResume(resume.id);
+                          }}
+                          className={`absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-black/10 bg-white/90 text-slate-700 shadow-sm hover:bg-red-50 hover:text-red-600 ${
+                            resumes.length <= 1 ? 'cursor-not-allowed opacity-40' : ''
+                          }`}
+                          title={resumes.length <= 1 ? 'At least one resume is required' : 'Delete resume'}
+                          aria-label={`Delete ${resume.fileName}`}
+                        >
+                          {deletingResumeId === resume.id ? <Loader2 className="animate-spin" size={13} /> : <Trash2 size={13} />}
+                        </button>
+                        <div className="mx-auto flex h-24 w-20 items-center justify-center rounded-xl border border-black/10 bg-gradient-to-br from-white to-slate-100 shadow-inner">
+                          {openingResumeId === resume.id ? (
+                            <Loader2 className="animate-spin text-slate-800" size={24} />
+                          ) : (
+                            <FileText className="text-slate-800" size={28} />
+                          )}
+                        </div>
+                        <div className="mt-2 flex min-w-0 items-start justify-center gap-2">
+                          {primaryResumeMode && (
+                            <input
+                              type="radio"
+                              name="primaryResume"
+                              checked={selectedPrimaryResumeId === resume.id}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(event) => {
+                                event.stopPropagation();
+                                setSelectedPrimaryResumeId(resume.id);
+                              }}
+                              className="mt-0.5 h-4 w-4 accent-black"
+                              aria-label={`Set ${resume.fileName} as primary resume`}
+                            />
+                          )}
+                          <p className="line-clamp-2 min-w-0 text-xs font-semibold leading-4 text-slate-950" title={resume.fileName}>
+                            {resume.fileName}
+                          </p>
+                        </div>
+                        {resume.isPrimary && !primaryResumeMode && (
+                          <span className="mt-2 inline-flex rounded-full bg-black px-2 py-0.5 text-[10px] font-semibold text-white">
+                            Primary
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </section>
         </div>
       </div>
+      {resumePreview && (
+        <ResumePreviewModal
+          url={resumePreview.url}
+          filename={resumePreview.filename}
+          onClose={closeResumePreview}
+        />
+      )}
     </CandidateLayout>
   );
 }

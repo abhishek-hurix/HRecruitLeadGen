@@ -260,6 +260,7 @@ export class AdminService {
         assessmentTokens: { orderBy: { createdAt: 'desc' }, take: 1 },
         assessments: { include: { submission: { include: { answers: { include: { question: true } } } } } },
         submissions: { include: { answers: { include: { question: true } } } },
+        resumes: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }] },
       },
     });
 
@@ -274,12 +275,32 @@ export class AdminService {
       assessmentInProgress: candidate.assessments[0]?.status === AssessmentStatus.IN_PROGRESS,
     });
 
+    const resumes = candidate.resumes.length > 0
+      ? candidate.resumes
+      : candidate.resumePath
+        ? [{
+            id: 'legacy-primary-resume',
+            candidateId: candidate.id,
+            fileName: `${candidate.fullName.replace(/\s+/g, '_')}_resume.pdf`,
+            filePath: candidate.resumePath,
+            isPrimary: true,
+            createdAt: candidate.createdAt,
+            updatedAt: candidate.updatedAt,
+          }]
+        : [];
+
     return {
       ...candidate,
       phone: candidate.fullPhone || candidate.phone,
       experienceLabel: getExperienceLabel(candidate.experienceCategory),
       journeyStatus,
       assessmentStatus: candidate.assessmentStatus,
+      resumes: resumes.map((resume) => ({
+        id: resume.id,
+        fileName: resume.fileName,
+        isPrimary: resume.isPrimary,
+        uploadedAt: resume.createdAt,
+      })),
     };
   }
 
@@ -288,6 +309,15 @@ export class AdminService {
     if (!candidate) throw new AppError(404, 'Candidate not found');
     const buffer = await storage.get(candidate.resumePath);
     return { buffer, filename: `${candidate.fullName.replace(/\s+/g, '_')}_resume.pdf` };
+  }
+
+  async getCandidateResume(candidateId: string, resumeId: string) {
+    const resume = await prisma.candidateResume.findFirst({
+      where: { id: resumeId, candidateId },
+    });
+    if (!resume) throw new AppError(404, 'Resume not found');
+    const buffer = await storage.get(resume.filePath);
+    return { buffer, filename: resume.fileName };
   }
 
   async exportCandidatesCSV() {

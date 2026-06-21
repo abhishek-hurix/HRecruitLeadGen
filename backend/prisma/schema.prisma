@@ -188,6 +188,11 @@ model CandidateProfile {
   verificationSentAt DateTime?                @map("verification_sent_at")
   verificationAttempts Int                  @default(0) @map("verification_attempts")
   verificationAttemptsWindowStart DateTime?  @map("verification_attempts_window_start")
+  phoneVerified      Boolean                  @default(false) @map("phone_verified")
+  phoneVerifiedAt    DateTime?                @map("phone_verified_at")
+  phoneOtpSentAt     DateTime?                @map("phone_otp_sent_at")
+  phoneVerificationAttempts Int               @default(0) @map("phone_verification_attempts")
+  phoneVerificationAttemptsWindowStart DateTime? @map("phone_verification_attempts_window_start")
   candidateStatus   CandidateStatus           @default(REGISTERED) @map("candidate_status")
   assessmentStatus  CandidateAssessmentStatus @default(NOT_STARTED) @map("assessment_status")
   assessmentDate    DateTime?                 @map("assessment_date")
@@ -217,12 +222,46 @@ model CandidateProfile {
   selectedRole     JobRole?          @relation(fields: [selectedRoleId], references: [id], onDelete: SetNull)
   assessmentTokens AssessmentToken[]
   emailVerificationTokens EmailVerificationToken[]
+  mobileVerificationOtps MobileVerificationOtp[]
   assessments      Assessment[]
   submissions      Submission[]
+  resumes          CandidateResume[]
 
   @@index([emailVerified])
   @@index([selectedRoleId])
   @@map("candidate_profiles")
+}
+
+model MobileVerificationOtp {
+  id          String    @id @default(uuid())
+  candidateId String    @map("candidate_id")
+  otpHash     String    @map("otp_hash")
+  phone       String
+  expiresAt   DateTime  @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  candidate CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId])
+  @@index([expiresAt])
+  @@map("mobile_verification_otps")
+}
+
+model CandidateResume {
+  id          String   @id @default(uuid())
+  candidateId String  @map("candidate_id")
+  fileName    String  @map("file_name")
+  filePath    String  @map("file_path")
+  isPrimary   Boolean @default(false) @map("is_primary")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  candidate CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId])
+  @@index([candidateId, isPrimary])
+  @@map("candidate_resumes")
 }
 
 model JobRole {

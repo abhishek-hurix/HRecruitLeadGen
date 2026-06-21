@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Copy, Download, FileText, Phone } from 'lucide-react';
 import { ResumePreviewModal } from '../../components/admin/ResumePreviewModal';
 import { AdminLayout } from '../../components/layout/AdminLayout';
-import { getCandidateById, getResumePreviewUrl, getSubmissionMarkdown } from '../../api/admin';
+import { getCandidateById, getCandidateResumePreviewUrl, getResumePreviewUrl, getSubmissionMarkdown } from '../../api/admin';
 import { formatDate } from '../../utils/validation';
 import { formatSourceLabel } from '../../utils/utm';
 
@@ -12,7 +12,8 @@ export function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const [resumePreview, setResumePreview] = useState<{ url: string; filename: string } | null>(null);
-  const [isOpeningResume, setIsOpeningResume] = useState(false);
+  const [openingResumeId, setOpeningResumeId] = useState<string | null>(null);
+  const [showAllResumes, setShowAllResumes] = useState(false);
   const [markdownPreview, setMarkdownPreview] = useState<{ content: string; filename: string } | null>(null);
   const [isOpeningMarkdown, setIsOpeningMarkdown] = useState(false);
   const [phoneCopied, setPhoneCopied] = useState(false);
@@ -39,14 +40,17 @@ export function CandidateDetailPage() {
     setResumePreview(null);
   };
 
-  const openResumePreview = async () => {
+  const openResumePreview = async (resume?: { id: string; fileName: string }) => {
     if (!id || !data?.resumePath) return;
-    setIsOpeningResume(true);
+    const resumeId = resume?.id || 'primary';
+    setOpeningResumeId(resumeId);
     try {
-      const url = await getResumePreviewUrl(id);
-      setResumePreview({ url, filename: `${data.fullName}_resume.pdf` });
+    const url = resume && resume.id !== 'legacy-primary-resume'
+        ? await getCandidateResumePreviewUrl(id, resume.id)
+        : await getResumePreviewUrl(id);
+      setResumePreview({ url, filename: resume?.fileName || `${data.fullName}_resume.pdf` });
     } finally {
-      setIsOpeningResume(false);
+      setOpeningResumeId(null);
     }
   };
 
@@ -85,33 +89,48 @@ export function CandidateDetailPage() {
     return <AdminLayout><p>Candidate not found</p></AdminLayout>;
   }
 
+  const resumes = (data.resumes || []) as Array<{
+    id: string;
+    fileName: string;
+    isPrimary: boolean;
+    uploadedAt: string;
+  }>;
+  const visibleResumes = showAllResumes ? resumes : resumes.slice(0, 6);
+  const verificationBadge = (verified: boolean) => (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+      verified ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+    }`}>
+      {verified ? 'Yes' : 'No'}
+    </span>
+  );
+
   return (
     <AdminLayout>
-      <Link to="/admin/candidates" className="flex items-center gap-2 text-hurix-blue text-sm mb-6 hover:underline">
-        <ArrowLeft size={16} /> Back to Candidates
+      <Link to="/admin/candidates" className="mb-3 flex items-center gap-2 text-xs text-hurix-blue hover:underline">
+        <ArrowLeft size={14} /> Back to Candidates
       </Link>
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <h1 className="text-2xl font-bold text-hurix-charcoal">{data.fullName}</h1>
+      <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <h1 className="text-xl font-bold text-hurix-charcoal">{data.fullName}</h1>
       </div>
 
-      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
+      <div className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {detailView === 'profile' && (
         <>
-          <div className="card-premium space-y-3">
-          <h2 className="font-semibold text-lg mb-4">Profile</h2>
-          <div className="flex justify-between text-sm gap-4"><span className="text-hurix-gray shrink-0">Name</span><span className="text-right">{data.fullName}</span></div>
-          <div className="flex justify-between text-sm gap-4"><span className="text-hurix-gray shrink-0">Email</span><span className="text-right break-all">{data.user.email}</span></div>
-          <div className="flex justify-between text-sm gap-4">
+          <div className="card-premium space-y-2.5 p-4">
+          <h2 className="mb-2 text-base font-semibold">Profile</h2>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Name</span><span className="text-right">{data.fullName}</span></div>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Email</span><span className="text-right break-all">{data.user.email}</span></div>
+          <div className="flex justify-between gap-4 text-xs">
             <span className="text-hurix-gray shrink-0">Phone</span>
             <span className="inline-flex flex-wrap justify-end gap-2 text-right">
               <span>{data.fullPhone || data.phone}</span>
               <button
                 type="button"
                 onClick={() => copyPhoneNumber(data.fullPhone || data.phone)}
-                className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-hurix-charcoal hover:bg-slate-50"
+                className="inline-flex items-center gap-1 rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-hurix-charcoal hover:bg-slate-50"
               >
-                <Copy size={12} />
+                <Copy size={10} />
                 {phoneCopied ? 'Copied' : 'Copy'}
               </button>
               <a
@@ -123,33 +142,24 @@ export function CandidateDetailPage() {
               </a>
             </span>
           </div>
-          <div className="flex justify-between text-sm gap-4"><span className="text-hurix-gray shrink-0">Country</span><span>{data.phoneCountry || '—'}</span></div>
-          <div className="flex justify-between text-sm gap-4"><span className="text-hurix-gray shrink-0">Country Code</span><span>{data.countryCode || '—'}</span></div>
-          <div className="flex justify-between text-sm gap-4"><span className="text-hurix-gray shrink-0">Years of Experience</span><span>{data.yearsOfExperience ?? '—'}</span></div>
-          <div className="flex justify-between text-sm gap-4"><span className="text-hurix-gray shrink-0">Experience Category</span><span>{data.experienceLabel || '—'}</span></div>
-          <div className="flex justify-between text-sm gap-4"><span className="text-hurix-gray shrink-0">LinkedIn</span><a href={data.linkedinUrl} target="_blank" rel="noreferrer" className="text-hurix-blue text-right break-all">{data.linkedinUrl}</a></div>
-          <div className="flex justify-between text-sm gap-4"><span className="text-hurix-gray shrink-0">Role</span><span className="text-right">{data.appliedRole || '-'}</span></div>
-          <div className="flex justify-between text-sm"><span className="text-hurix-gray">Referral</span><span>{data.referralCode || '-'}</span></div>
-          <div className="flex justify-between text-sm">
-            <span className="text-hurix-gray">Resume</span>
-            {data.resumePath ? (
-              <button type="button" onClick={openResumePreview} className="text-hurix-blue hover:underline" disabled={isOpeningResume}>
-                {isOpeningResume ? 'Opening...' : 'Uploaded'}
-              </button>
-            ) : (
-              <span>Not Uploaded</span>
-            )}
-          </div>
-          <div className="flex justify-between text-sm"><span className="text-hurix-gray">Email Verified</span><span>{data.emailVerified ? 'Yes' : 'No'}</span></div>
-          <div className="flex justify-between text-sm"><span className="text-hurix-gray">Journey Status</span><span className="font-medium">{data.journeyStatus?.replace(/_/g, ' ') || '-'}</span></div>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Country</span><span>{data.phoneCountry || '—'}</span></div>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Country Code</span><span>{data.countryCode || '—'}</span></div>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Years of Experience</span><span>{data.yearsOfExperience ?? '—'}</span></div>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Experience Category</span><span>{data.experienceLabel || '—'}</span></div>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">LinkedIn</span><a href={data.linkedinUrl} target="_blank" rel="noreferrer" className="text-hurix-blue text-right break-all">{data.linkedinUrl}</a></div>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Role</span><span className="text-right">{data.appliedRole || '-'}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Referral</span><span>{data.referralCode || '-'}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Email Verified</span>{verificationBadge(Boolean(data.emailVerified))}</div>
+          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Mobile Verified</span>{verificationBadge(Boolean(data.phoneVerified))}</div>
+          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Journey Status</span><span className="font-medium">{data.journeyStatus?.replace(/_/g, ' ') || '-'}</span></div>
           </div>
 
-          <div className="card-premium space-y-3">
-            <h2 className="font-semibold text-lg mb-4">Applied Position</h2>
-          <div className="flex justify-between text-sm"><span className="text-hurix-gray">Role</span><span className="font-medium">{data.selectedRoleName || '—'}</span></div>
-          <div className="flex justify-between text-sm"><span className="text-hurix-gray">Country</span><span>{data.selectedCountry || '—'}</span></div>
-          <div className="flex justify-between text-sm gap-4"><span className="text-hurix-gray shrink-0">Compensation</span><span className="text-right">{data.selectedCompensation || '—'}</span></div>
-          <div className="flex justify-between text-sm"><span className="text-hurix-gray">Selected On</span><span>{data.roleSelectedAt ? formatDate(data.roleSelectedAt) : '—'}</span></div>
+          <div className="card-premium space-y-2.5 p-4">
+            <h2 className="mb-2 text-base font-semibold">Applied Position</h2>
+          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Role</span><span className="font-medium">{data.selectedRoleName || '—'}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Country</span><span>{data.selectedCountry || '—'}</span></div>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Compensation</span><span className="text-right">{data.selectedCompensation || '—'}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Selected On</span><span>{data.roleSelectedAt ? formatDate(data.roleSelectedAt) : '—'}</span></div>
           {Array.isArray(data.selectedSkills) && data.selectedSkills.length > 0 && (
             <div className="pt-2">
               <p className="text-hurix-gray text-sm mb-2">Skills</p>
@@ -162,16 +172,16 @@ export function CandidateDetailPage() {
           )}
           </div>
 
-          <div className="card-premium space-y-3">
-            <h2 className="font-semibold text-lg mb-4">Acquisition</h2>
-          <div className="flex justify-between text-sm"><span className="text-hurix-gray">Source</span><span>{formatSourceLabel(data.utmSource)}</span></div>
-          <div className="flex justify-between text-sm"><span className="text-hurix-gray">Medium</span><span>{data.utmMedium || '-'}</span></div>
-          <div className="flex justify-between text-sm"><span className="text-hurix-gray">Campaign</span><span>{data.utmCampaign || '-'}</span></div>
-          <div className="flex justify-between text-sm"><span className="text-hurix-gray">First Touch</span><span>{formatSourceLabel(data.firstTouchSource)}</span></div>
-          <div className="flex justify-between text-sm"><span className="text-hurix-gray">Last Touch</span><span>{formatSourceLabel(data.lastTouchSource)}</span></div>
-          <div className="flex justify-between text-sm gap-4"><span className="text-hurix-gray shrink-0">Landing Page</span><span className="text-right break-all text-xs">{data.attributionLandingPage || '-'}</span></div>
-          <div className="flex justify-between text-sm gap-4"><span className="text-hurix-gray shrink-0">Referrer</span><span className="text-right break-all text-xs">{data.attributionReferrer || '-'}</span></div>
-          <div className="flex justify-between text-sm"><span className="text-hurix-gray">Device</span><span>{data.attributionDevice || '-'}</span></div>
+          <div className="card-premium space-y-2.5 p-4">
+            <h2 className="mb-2 text-base font-semibold">Acquisition</h2>
+          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Source</span><span>{formatSourceLabel(data.utmSource)}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Medium</span><span>{data.utmMedium || '-'}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Campaign</span><span>{data.utmCampaign || '-'}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-hurix-gray">First Touch</span><span>{formatSourceLabel(data.firstTouchSource)}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Last Touch</span><span>{formatSourceLabel(data.lastTouchSource)}</span></div>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Landing Page</span><span className="text-right break-all text-[11px]">{data.attributionLandingPage || '-'}</span></div>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Referrer</span><span className="text-right break-all text-[11px]">{data.attributionReferrer || '-'}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Device</span><span>{data.attributionDevice || '-'}</span></div>
           </div>
         </>
         )}
@@ -192,6 +202,61 @@ export function CandidateDetailPage() {
         </div>
         )}
       </div>
+
+      {detailView === 'profile' && (
+        <div className="card-premium mb-4 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold">Resume</h2>
+              <p className="text-xs text-hurix-gray">Primary resume appears first. This section is read-only for admins.</p>
+            </div>
+            {resumes.length > 6 && (
+              <button
+                type="button"
+                onClick={() => setShowAllResumes((value) => !value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-hurix-blue shadow-sm hover:bg-slate-50"
+              >
+                {showAllResumes ? 'Show Less' : 'View 2nd Row'}
+              </button>
+            )}
+          </div>
+
+          {resumes.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-4 text-center text-xs text-hurix-gray">
+              No resume uploaded.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              {visibleResumes.map((resume) => (
+                <button
+                  type="button"
+                  key={resume.id}
+                  onClick={() => openResumePreview(resume)}
+                  className={`relative rounded-2xl border p-2 text-center shadow-sm transition hover:-translate-y-0.5 hover:bg-white ${
+                    resume.isPrimary ? 'border-black/20 bg-white' : 'border-slate-100 bg-white/70'
+                  }`}
+                >
+                  <div className="mx-auto flex h-20 w-16 items-center justify-center rounded-xl border border-black/10 bg-gradient-to-br from-white to-slate-100 shadow-inner">
+                    {openingResumeId === resume.id ? (
+                      <span className="text-xs text-hurix-gray">Opening...</span>
+                    ) : (
+                      <FileText className="text-slate-800" size={22} />
+                    )}
+                  </div>
+                  <p className="mt-1.5 line-clamp-2 min-h-[1.75rem] text-[11px] font-semibold leading-3.5 text-slate-950" title={resume.fileName}>
+                    {resume.fileName}
+                  </p>
+                  {resume.isPrimary && (
+                    <span className="mt-1 inline-flex rounded-full bg-black px-2 py-0.5 text-[9px] font-semibold text-white">
+                      Primary
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {detailView === 'assessment' && submission && (
         <div className="card-premium mb-8">

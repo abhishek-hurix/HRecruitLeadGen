@@ -12,6 +12,7 @@ import {
   getDashboard,
   getCandidates,
   getCandidateById,
+  downloadCandidateResume,
   downloadResume,
   exportCSV,
   getQuestions,
@@ -99,6 +100,7 @@ router.get('/candidates', requirePermission(Permission.VIEW_CANDIDATES), getCand
 router.get('/candidates/export', requirePermission(Permission.EXPORT_CANDIDATES), exportCSV);
 router.get('/candidates/:id', requirePermission(Permission.VIEW_CANDIDATES), getCandidateById);
 router.get('/candidates/:id/resume', requirePermission(Permission.VIEW_RESUMES), downloadResume);
+router.get('/candidates/:id/resumes/:resumeId', requirePermission(Permission.VIEW_RESUMES), downloadCandidateResume);
 router.get('/questions', requirePermission(Permission.MANAGE_QUESTIONS), getQuestions);
 router.post('/questions', requirePermission(Permission.MANAGE_QUESTIONS), createQuestion);
 router.put('/questions/:id', requirePermission(Permission.MANAGE_QUESTIONS), updateQuestion);
