@@ -164,11 +164,17 @@ Landing → Candidate Login → Portal Dashboard → Start/Continue Assessment
 Landing → Admin Login → Dashboard → Candidates / Job Roles / Analytics / Questions / Users / Settings
 ```
 
-### UTM campaign link (example)
-```
-https://talent.hurix.com/?utm_source=youtube&utm_medium=video&utm_campaign=ai_hiring_2026
-```
+### UTM campaign links
+
 Visitor is tracked on landing; attribution is persisted when the candidate registers.
+
+| Channel | Example URL |
+|---------|-------------|
+| YouTube | `https://candidates.hurixsystems.com/?utm_source=youtube&utm_medium=video&utm_campaign=ai_hiring_2026&utm_content=shorts` |
+| Email | `https://candidates.hurixsystems.com/?utm_source=email&utm_medium=email&utm_campaign=ai_hiring_2026&utm_content=newsletter_march` |
+| LinkedIn | `https://candidates.hurixsystems.com/?utm_source=linkedin&utm_medium=social&utm_campaign=ai_hiring_2026&utm_content=post_hiring` |
+
+Full guide with local dev URLs and naming conventions: [`docs/UTM_CAMPAIGN_URLS.md`](./docs/UTM_CAMPAIGN_URLS.md)
 
 ---
 
@@ -286,6 +292,7 @@ See [`DOCKER_EC2_DEPLOY.md`](./DOCKER_EC2_DEPLOY.md) and [`docs/14-DEPLOYMENT_PL
 | [Security Design](./docs/11-SECURITY_DESIGN.md) | Auth & security controls |
 | [Admin Dashboard](./docs/12-ADMIN_DASHBOARD_DESIGN.md) | Admin UI design |
 | [Testing Guide](./docs/TESTING.md) | Automated testing strategy |
+| [UTM Campaign URLs](./docs/UTM_CAMPAIGN_URLS.md) | YouTube, email, LinkedIn tracking links |
 
 ---
 
