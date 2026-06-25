@@ -22,6 +22,8 @@ import {
   getSubmission,
   getSubmissionMarkdown,
   runSubmissionAiReview,
+  markTestUser,
+  unmarkTestUser,
   listAdmins,
   createAdmin,
   updateAdmin,
@@ -99,6 +101,8 @@ router.get('/dashboard', requirePermission(Permission.VIEW_DASHBOARD), getDashbo
 router.get('/candidates', requirePermission(Permission.VIEW_CANDIDATES), getCandidates);
 router.get('/candidates/export', requirePermission(Permission.EXPORT_CANDIDATES), exportCSV);
 router.get('/candidates/:id', requirePermission(Permission.VIEW_CANDIDATES), getCandidateById);
+router.post('/candidates/:id/mark-test-user', requireRole(AdminRole.SUPER_ADMIN), markTestUser);
+router.post('/candidates/:id/unmark-test-user', requireRole(AdminRole.SUPER_ADMIN), unmarkTestUser);
 router.get('/candidates/:id/resume', requirePermission(Permission.VIEW_RESUMES), downloadResume);
 router.get('/candidates/:id/resumes/:resumeId', requirePermission(Permission.VIEW_RESUMES), downloadCandidateResume);
 router.get('/questions', requirePermission(Permission.MANAGE_QUESTIONS), getQuestions);

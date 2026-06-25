@@ -1,25 +1,38 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Search, Download, ClipboardList, Copy, Phone } from 'lucide-react';
 import { ResumePreviewModal } from '../../components/admin/ResumePreviewModal';
+import { TestUserBadge, TestUserConfirmModal } from '../../components/admin/TestUserConfirmModal';
 import { AdminLayout } from '../../components/layout/AdminLayout';
-import { getCandidates, exportCandidatesCSV, getResumePreviewUrl, getJobRoles } from '../../api/admin';
+import {
+  getCandidates,
+  exportCandidatesCSV,
+  getResumePreviewUrl,
+  getJobRoles,
+  markCandidateTestUser,
+  unmarkCandidateTestUser,
+} from '../../api/admin';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { formatDate } from '../../utils/validation';
 import { EXPERIENCE_OPTIONS } from '../../utils/experience';
+import type { Candidate } from '../../types';
 
 const CANDIDATES_PAGE_SIZE = 6;
 
 export function CandidatesPage() {
-  const { hasPermission } = useAdminAuth();
+  const queryClient = useQueryClient();
+  const { hasPermission, isSuperAdmin } = useAdminAuth();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [experience, setExperience] = useState('');
   const [country, setCountry] = useState('');
   const [minScore, setMinScore] = useState('');
   const [role, setRole] = useState('all');
+  const [candidateType, setCandidateType] = useState<'real' | 'test' | 'all'>('real');
   const [page, setPage] = useState(1);
+  const [includeTestUsersExport, setIncludeTestUsersExport] = useState(false);
+  const [testUserModal, setTestUserModal] = useState<Candidate | null>(null);
   const [resumePreview, setResumePreview] = useState<{ url: string; filename: string } | null>(null);
   const [loadingResumeId, setLoadingResumeId] = useState<string | null>(null);
   const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
@@ -31,7 +44,7 @@ export function CandidatesPage() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['candidates', search, status, experience, country, minScore, role, page, CANDIDATES_PAGE_SIZE],
+    queryKey: ['candidates', search, status, experience, country, minScore, role, candidateType, page, CANDIDATES_PAGE_SIZE],
     queryFn: () =>
       getCandidates({
         search,
@@ -40,10 +53,26 @@ export function CandidatesPage() {
         country,
         minScore: minScore ? Number(minScore) : undefined,
         role: role === 'all' ? undefined : role,
+        candidateType,
         page,
         limit: CANDIDATES_PAGE_SIZE,
       }),
   });
+
+  const handleTestUserToggle = async () => {
+    if (!testUserModal) return;
+    if (testUserModal.isTestUser) {
+      await unmarkCandidateTestUser(testUserModal.id);
+    } else {
+      await markCandidateTestUser(testUserModal.id);
+    }
+    await queryClient.invalidateQueries({ queryKey: ['candidates'] });
+    await queryClient.invalidateQueries({ queryKey: ['analytics-overview'] });
+    await queryClient.invalidateQueries({ queryKey: ['analytics-sources'] });
+    await queryClient.invalidateQueries({ queryKey: ['analytics-campaigns'] });
+    await queryClient.invalidateQueries({ queryKey: ['analytics-devices'] });
+    await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  };
 
   const statusBadge = (s: string) => {
     const colors: Record<string, string> = {
@@ -124,11 +153,36 @@ export function CandidatesPage() {
   return (
     <AdminLayout>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
-        <h1 className="text-xl sm:text-2xl font-bold text-hurix-charcoal">Candidates</h1>
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-hurix-charcoal">Candidates</h1>
+          {data && (
+            <p className="text-sm text-hurix-gray mt-1">
+              Real Candidates: <span className="font-semibold text-hurix-charcoal">{data.realCandidateCount}</span>
+              {' · '}
+              Test Candidates: <span className="font-semibold text-amber-700">{data.testCandidateCount}</span>
+            </p>
+          )}
+        </div>
         {canExport && (
-          <button onClick={() => exportCandidatesCSV()} className="btn-secondary flex items-center justify-center gap-2 text-sm w-full sm:w-auto">
-            <Download size={16} /> Export CSV
-          </button>
+          <div className="flex flex-col sm:items-end gap-2">
+            {isSuperAdmin && (
+              <label className="flex items-center gap-2 text-xs text-hurix-gray">
+                <input
+                  type="checkbox"
+                  checked={includeTestUsersExport}
+                  onChange={(e) => setIncludeTestUsersExport(e.target.checked)}
+                  className="rounded border-slate-300"
+                />
+                Include test users in export
+              </label>
+            )}
+            <button
+              onClick={() => exportCandidatesCSV(isSuperAdmin && includeTestUsersExport)}
+              className="btn-secondary flex items-center justify-center gap-2 text-sm w-full sm:w-auto"
+            >
+              <Download size={16} /> Export CSV
+            </button>
+          </div>
         )}
       </div>
 
@@ -157,7 +211,16 @@ export function CandidatesPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-hurix-gray" size={18} />
           <input className="input-field pl-10" placeholder="Search by name or email..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+          <select
+            className="input-field"
+            value={candidateType}
+            onChange={(e) => { setCandidateType(e.target.value as 'real' | 'test' | 'all'); setPage(1); }}
+          >
+            <option value="real">Real Candidates</option>
+            <option value="test">Test Candidates</option>
+            <option value="all">All Candidates</option>
+          </select>
           <select className="input-field" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
             <option value="">All Journey Status</option>
             <option value="REGISTERED">Registered</option>
@@ -205,7 +268,10 @@ export function CandidatesPage() {
             <div key={c.id} className="card-premium p-4 space-y-3">
               <div className="flex justify-between items-start gap-2">
                 <div>
-                  <p className="font-semibold text-hurix-charcoal">{c.fullName}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-hurix-charcoal">{c.fullName}</p>
+                    {c.isTestUser && <TestUserBadge />}
+                  </div>
                   <p className="text-xs text-hurix-gray font-mono">{c.applicationId || c.id.slice(0, 8)}</p>
                 </div>
                 {statusBadge(c.journeyStatus)}
@@ -233,6 +299,15 @@ export function CandidatesPage() {
                 <Link to={`/admin/candidates/${c.id}?view=assessment`} className="text-hurix-blue text-sm font-medium flex items-center gap-1">
                   <ClipboardList size={14} /> Assessment
                 </Link>
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setTestUserModal(c)}
+                    className="text-left text-amber-700 text-sm font-medium"
+                  >
+                    {c.isTestUser ? 'Remove Test User' : 'Mark as Test User'}
+                  </button>
+                )}
               </div>
             </div>
           ))
@@ -279,7 +354,12 @@ export function CandidatesPage() {
               data?.data.map((c) => (
                 <tr key={c.id} className="border-b hover:bg-slate-50">
                   <td className="truncate px-2 py-2.5 font-mono">{c.applicationId || c.id.slice(0, 8).toUpperCase()}</td>
-                  <td className="truncate px-2 py-2.5 font-medium">{c.fullName}</td>
+                  <td className="truncate px-2 py-2.5 font-medium">
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <span className="truncate">{c.fullName}</span>
+                      {c.isTestUser && <TestUserBadge />}
+                    </div>
+                  </td>
                   <td className="truncate px-2 py-2.5 text-hurix-gray" title={c.email}>{c.email}</td>
                   <td className="truncate px-2 py-2.5 text-hurix-gray">{phoneActions(c.phone)}</td>
                   <td className="truncate px-2 py-2.5 text-hurix-gray">{c.phoneCountry || '—'}</td>
@@ -294,7 +374,16 @@ export function CandidatesPage() {
                       <button onClick={() => openResumePreview(c.id, c.fullName)} className="text-left text-hurix-blue hover:underline" disabled={loadingResumeId === c.id}>
                         {loadingResumeId === c.id ? 'Opening...' : 'Resume'}
                       </button>
-                      <Link to={`/admin/candidates/${c.id}?view=assessment`} className="inline-flex items-center gap-1 text-hurix-blue hover:underline"><ClipboardList size={11} /> Test</Link>
+                      <Link to={`/admin/candidates/${c.id}?view=assessment`} className="inline-flex items-center gap-1 text-hurix-blue hover:underline"><ClipboardList size={11} /> Assessment</Link>
+                      {isSuperAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setTestUserModal(c)}
+                          className="text-left text-amber-700 hover:underline"
+                        >
+                          {c.isTestUser ? 'Remove Test User' : 'Mark Test User'}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -312,6 +401,14 @@ export function CandidatesPage() {
             </button>
           ))}
         </div>
+      )}
+      {testUserModal && (
+        <TestUserConfirmModal
+          candidateName={testUserModal.fullName}
+          isTestUser={Boolean(testUserModal.isTestUser)}
+          onConfirm={handleTestUserToggle}
+          onClose={() => setTestUserModal(null)}
+        />
       )}
       {resumePreview && (
         <ResumePreviewModal

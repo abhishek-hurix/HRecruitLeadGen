@@ -4,7 +4,7 @@ import { analyticsService } from '../services/analytics.service';
 import { AuthRequest } from '../middleware/auth';
 
 function parseFilters(req: AuthRequest) {
-  const { dateFrom, dateTo, source, campaign, medium, deviceType, includeTest, includeInternal } = req.query;
+  const { dateFrom, dateTo, source, campaign, medium, deviceType, includeTest, includeInternal, includeTestCandidates } = req.query;
   return {
     dateFrom: dateFrom ? String(dateFrom) : undefined,
     dateTo: dateTo ? String(dateTo) : undefined,
@@ -14,6 +14,7 @@ function parseFilters(req: AuthRequest) {
     deviceType: deviceType ? (String(deviceType).toUpperCase() as DeviceType) : undefined,
     includeTest: includeTest === 'true',
     includeInternal: includeInternal === 'true',
+    includeTestCandidates: includeTestCandidates === 'true',
   };
 }
 

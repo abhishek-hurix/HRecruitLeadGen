@@ -4,6 +4,7 @@ import { config } from '../config';
 import { AppError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { getExperienceLabel } from '../utils/experience';
+import { realCandidateWhere } from '../utils/test-candidate';
 
 export function formatCompensation(role: {
   compensationType: CompensationType;
@@ -174,7 +175,7 @@ export class JobRoleService {
     updatedAt: Date;
   }) {
     const candidates = await prisma.candidateProfile.findMany({
-      where: { selectedRoleId: role.id },
+      where: { selectedRoleId: role.id, ...realCandidateWhere(false) },
       include: { submissions: true, assessments: true },
     });
 

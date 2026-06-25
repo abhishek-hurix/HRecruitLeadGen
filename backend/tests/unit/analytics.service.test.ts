@@ -93,6 +93,31 @@ describeIfDb('AnalyticsService', () => {
     expect(overview.visitors).toBe(0);
   });
 
+  it('excludes marked test candidates from funnel by default', async () => {
+    await resetTestData();
+    const visitor = await createTestVisitor({ source: 'youtube', campaign: 'qa' });
+    const user = await createTestCandidate();
+    const candidateId = user.candidateProfile!.id;
+
+    await (await getTestPrisma()).visitor.update({
+      where: { id: visitor.id },
+      data: { candidateId, registeredAt: new Date() },
+    });
+    await (await getTestPrisma()).candidateProfile.update({
+      where: { id: candidateId },
+      data: {
+        candidateStatus: CandidateStatus.SUBMITTED,
+        assessmentStatus: CandidateAssessmentStatus.SUBMITTED,
+        isTestUser: true,
+      },
+    });
+
+    const overview = await analyticsService.getOverview({});
+    const withTest = await analyticsService.getOverview({ includeTestCandidates: true });
+    expect(overview.registrations).toBe(0);
+    expect(withTest.registrations).toBe(1);
+  });
+
   it('returns filter options', async () => {
     await createTestVisitor({ source: 'bing', campaign: 'brand' });
     const options = await analyticsService.getFilterOptions({ includeTest: true, includeInternal: true });

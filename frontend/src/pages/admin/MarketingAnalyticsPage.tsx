@@ -75,6 +75,7 @@ export function MarketingAnalyticsPage() {
   const [filters, setFilters] = useState<AnalyticsFilters>({});
   const [includeTest, setIncludeTest] = useState(false);
   const [includeInternal, setIncludeInternal] = useState(false);
+  const [includeTestCandidates, setIncludeTestCandidates] = useState(false);
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -82,6 +83,7 @@ export function MarketingAnalyticsPage() {
     ...filters,
     includeTest,
     includeInternal,
+    includeTestCandidates,
     ...(selectedSource ? { source: selectedSource } : {}),
   };
 
@@ -106,7 +108,7 @@ export function MarketingAnalyticsPage() {
   });
 
   const { data: filterOptions } = useQuery({
-    queryKey: ['analytics-filters', includeTest, includeInternal],
+    queryKey: ['analytics-filters', includeTest, includeInternal, includeTestCandidates],
     queryFn: () => getAnalyticsFilterOptions({ includeTest, includeInternal }),
   });
 
@@ -158,6 +160,15 @@ export function MarketingAnalyticsPage() {
               className="rounded border-slate-300"
             />
             Include Internal Traffic
+          </label>
+          <label className="flex items-center gap-2 text-sm text-hurix-charcoal bg-white border border-slate-200 rounded-lg px-3 py-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeTestCandidates}
+              onChange={(e) => setIncludeTestCandidates(e.target.checked)}
+              className="rounded border-slate-300"
+            />
+            Include Test Candidates
           </label>
           <button
             type="button"

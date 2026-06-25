@@ -8,6 +8,7 @@ import { assessmentTokenService, JourneyStatus } from './assessment-token.servic
 import { aiAssessmentService } from './ai-assessment.service';
 import { getPermissionsForRole } from '../config/permissions';
 import { getExperienceLabel } from '../utils/experience';
+import { realCandidateWhere } from '../utils/test-candidate';
 
 export class AdminService {
   async login(email: string, password: string) {
@@ -55,6 +56,7 @@ export class AdminService {
   }
 
   async getDashboard(role: AdminRole) {
+    const realOnly = realCandidateWhere(false);
     const [
       totalCandidates,
       registered,
@@ -67,20 +69,23 @@ export class AdminService {
       avgScore,
       experienceGroups,
     ] = await Promise.all([
-      prisma.candidateProfile.count(),
-      prisma.candidateProfile.count({ where: { candidateStatus: CandidateStatus.REGISTERED } }),
-      prisma.candidateProfile.count({ where: { emailVerified: true } }),
-      prisma.candidateProfile.count({ where: { candidateStatus: CandidateStatus.STARTED } }),
-      prisma.candidateProfile.count({ where: { candidateStatus: CandidateStatus.SUBMITTED } }),
-      prisma.candidateProfile.count({ where: { selectionStatus: SelectionStatus.SELECTED } }),
-      prisma.candidateProfile.count({ where: { selectionStatus: SelectionStatus.REJECTED } }),
+      prisma.candidateProfile.count({ where: realOnly }),
+      prisma.candidateProfile.count({ where: { ...realOnly, candidateStatus: CandidateStatus.REGISTERED } }),
+      prisma.candidateProfile.count({ where: { ...realOnly, emailVerified: true } }),
+      prisma.candidateProfile.count({ where: { ...realOnly, candidateStatus: CandidateStatus.STARTED } }),
+      prisma.candidateProfile.count({ where: { ...realOnly, candidateStatus: CandidateStatus.SUBMITTED } }),
+      prisma.candidateProfile.count({ where: { ...realOnly, selectionStatus: SelectionStatus.SELECTED } }),
+      prisma.candidateProfile.count({ where: { ...realOnly, selectionStatus: SelectionStatus.REJECTED } }),
       role === AdminRole.SUPER_ADMIN ? prisma.adminUser.count() : Promise.resolve(0),
-      prisma.submission.aggregate({ _avg: { score: true } }),
+      prisma.submission.aggregate({
+        where: { candidate: realOnly },
+        _avg: { score: true },
+      }),
       role === AdminRole.SUPER_ADMIN
         ? prisma.candidateProfile.groupBy({
             by: ['experienceCategory'],
             _count: { _all: true },
-            where: { experienceCategory: { not: null } },
+            where: { experienceCategory: { not: null }, ...realOnly },
           })
         : Promise.resolve([] as Array<{ experienceCategory: string | null; _count: { _all: number } }>),
     ]);
@@ -121,14 +126,22 @@ export class AdminService {
     country?: string;
     role?: string;
     minScore?: number;
+    candidateType?: 'real' | 'test' | 'all';
     page?: number;
     limit?: number;
   }) {
     const page = params.page || 1;
     const limit = params.limit || 20;
     const skip = (page - 1) * limit;
+    const candidateType = params.candidateType || 'real';
 
     const where: Prisma.CandidateProfileWhereInput = {};
+
+    if (candidateType === 'real') {
+      where.isTestUser = false;
+    } else if (candidateType === 'test') {
+      where.isTestUser = true;
+    }
 
     if (params.search) {
       where.OR = [
@@ -171,7 +184,7 @@ export class AdminService {
       where.assessmentStatus = assessmentStatus;
     }
 
-    const [candidates, total, roleRows] = await Promise.all([
+    const [candidates, total, realCandidateCount, testCandidateCount, roleRows] = await Promise.all([
       prisma.candidateProfile.findMany({
         where,
         skip,
@@ -179,6 +192,7 @@ export class AdminService {
         orderBy: { createdAt: 'desc' },
         include: {
           user: true,
+          testUserMarkedBy: { select: { email: true } },
           assessmentTokens: { orderBy: { createdAt: 'desc' }, take: 1 },
           assessments: {
             orderBy: { createdAt: 'desc' },
@@ -193,6 +207,8 @@ export class AdminService {
         },
       }),
       prisma.candidateProfile.count({ where }),
+      prisma.candidateProfile.count({ where: { isTestUser: false } }),
+      prisma.candidateProfile.count({ where: { isTestUser: true } }),
       prisma.jobRole.findMany({
         select: { id: true, title: true },
         orderBy: { title: 'asc' },
@@ -235,6 +251,9 @@ export class AdminService {
         score: c.submissions[0] ? Number(c.submissions[0].score) : null,
         submittedAt: c.submissions[0]?.submittedAt || null,
         createdAt: c.createdAt,
+        isTestUser: c.isTestUser,
+        testUserMarkedAt: c.testUserMarkedAt,
+        testUserMarkedBy: c.testUserMarkedBy?.email || null,
       };
     });
 
@@ -245,6 +264,8 @@ export class AdminService {
 
     return {
       data: mapped,
+      realCandidateCount,
+      testCandidateCount,
       roleFilters: roleRows
         .map((role) => role.title)
         .filter((role) => Boolean(role.trim())),
@@ -257,6 +278,7 @@ export class AdminService {
       where: { id },
       include: {
         user: true,
+        testUserMarkedBy: { select: { email: true } },
         assessmentTokens: { orderBy: { createdAt: 'desc' }, take: 1 },
         assessments: { include: { submission: { include: { answers: { include: { question: true } } } } } },
         submissions: { include: { answers: { include: { question: true } } } },
@@ -295,6 +317,7 @@ export class AdminService {
       experienceLabel: getExperienceLabel(candidate.experienceCategory),
       journeyStatus,
       assessmentStatus: candidate.assessmentStatus,
+      testUserMarkedBy: candidate.testUserMarkedBy?.email || null,
       resumes: resumes.map((resume) => ({
         id: resume.id,
         fileName: resume.fileName,
@@ -302,6 +325,65 @@ export class AdminService {
         uploadedAt: resume.createdAt,
       })),
     };
+  }
+
+  async markTestUser(candidateId: string, adminId: string) {
+    const candidate = await prisma.candidateProfile.findUnique({ where: { id: candidateId } });
+    if (!candidate) throw new AppError(404, 'Candidate not found');
+    if (candidate.isTestUser) {
+      return { id: candidateId, isTestUser: true };
+    }
+
+    const now = new Date();
+    await prisma.candidateProfile.update({
+      where: { id: candidateId },
+      data: {
+        isTestUser: true,
+        testUserMarkedAt: now,
+        testUserMarkedByAdminId: adminId,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        adminUserId: adminId,
+        action: 'TEST_USER_MARKED',
+        entityType: 'candidate',
+        entityId: candidateId,
+        metadata: { fullName: candidate.fullName },
+      },
+    });
+
+    return { id: candidateId, isTestUser: true, testUserMarkedAt: now };
+  }
+
+  async unmarkTestUser(candidateId: string, adminId: string) {
+    const candidate = await prisma.candidateProfile.findUnique({ where: { id: candidateId } });
+    if (!candidate) throw new AppError(404, 'Candidate not found');
+    if (!candidate.isTestUser) {
+      return { id: candidateId, isTestUser: false };
+    }
+
+    await prisma.candidateProfile.update({
+      where: { id: candidateId },
+      data: {
+        isTestUser: false,
+        testUserMarkedAt: null,
+        testUserMarkedByAdminId: null,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        adminUserId: adminId,
+        action: 'TEST_USER_UNMARKED',
+        entityType: 'candidate',
+        entityId: candidateId,
+        metadata: { fullName: candidate.fullName },
+      },
+    });
+
+    return { id: candidateId, isTestUser: false };
   }
 
   async getResume(id: string) {
@@ -320,8 +402,9 @@ export class AdminService {
     return { buffer, filename: resume.fileName };
   }
 
-  async exportCandidatesCSV() {
+  async exportCandidatesCSV(includeTestUsers = false) {
     const candidates = await prisma.candidateProfile.findMany({
+      where: realCandidateWhere(includeTestUsers),
       include: {
         user: true,
         assessmentTokens: { orderBy: { createdAt: 'desc' }, take: 1 },
@@ -339,7 +422,7 @@ export class AdminService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const headers = ['Full Name', 'Email', 'Phone', 'Phone Country', 'Experience', 'LinkedIn', 'Role', 'Referral Code', 'Applied Role', 'Role Country', 'Compensation', 'Source', 'Medium', 'Campaign', 'First Touch', 'Last Touch', 'Journey Status', 'Assessment Status', 'Score', 'Submitted At'];
+    const headers = ['Full Name', 'Email', 'Phone', 'Phone Country', 'Experience', 'LinkedIn', 'Role', 'Referral Code', 'Applied Role', 'Role Country', 'Compensation', 'Source', 'Medium', 'Campaign', 'First Touch', 'Last Touch', 'Journey Status', 'Assessment Status', 'Score', 'Submitted At', 'Is Test User'];
     const rows = candidates.map((c) => {
       const latestToken = c.assessmentTokens[0];
       const journeyStatus = assessmentTokenService.resolveJourneyStatus({
@@ -377,6 +460,7 @@ export class AdminService {
         c.assessments[0]?.status || 'NOT_STARTED',
         c.submissions[0] ? String(c.submissions[0].score) : '',
         c.submissions[0]?.submittedAt?.toISOString() || '',
+        c.isTestUser ? 'yes' : 'no',
       ];
     });
 

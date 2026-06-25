@@ -33,12 +33,15 @@ export async function getCandidates(params: {
   country?: string;
   role?: string;
   minScore?: number;
+  candidateType?: 'real' | 'test' | 'all';
   page?: number;
   limit?: number;
 }) {
   const { data } = await api.get('/admin/candidates', { params });
   return data as {
     data: Candidate[];
+    realCandidateCount: number;
+    testCandidateCount: number;
     roleFilters: string[];
     pagination: { page: number; limit: number; total: number; totalPages: number };
   };
@@ -79,14 +82,27 @@ export async function getCandidateResumePreviewUrl(candidateId: string, resumeId
   return window.URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
 }
 
-export async function exportCandidatesCSV() {
-  const { data } = await api.get('/admin/candidates/export', { responseType: 'blob' });
+export async function exportCandidatesCSV(includeTestUsers = false) {
+  const { data } = await api.get('/admin/candidates/export', {
+    responseType: 'blob',
+    params: includeTestUsers ? { includeTestUsers: 'true' } : undefined,
+  });
   const url = window.URL.createObjectURL(new Blob([data]));
   const link = document.createElement('a');
   link.href = url;
   link.download = 'candidates.csv';
   link.click();
   window.URL.revokeObjectURL(url);
+}
+
+export async function markCandidateTestUser(id: string) {
+  const { data } = await api.post(`/admin/candidates/${id}/mark-test-user`);
+  return data;
+}
+
+export async function unmarkCandidateTestUser(id: string) {
+  const { data } = await api.post(`/admin/candidates/${id}/unmark-test-user`);
+  return data;
 }
 
 export async function getQuestions(language?: string, page = 1, jobRoleId?: string) {

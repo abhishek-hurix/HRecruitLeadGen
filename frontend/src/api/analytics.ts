@@ -9,6 +9,7 @@ export interface AnalyticsFilters {
   deviceType?: string;
   includeTest?: boolean;
   includeInternal?: boolean;
+  includeTestCandidates?: boolean;
 }
 
 export interface FunnelOverview {
@@ -46,6 +47,7 @@ function buildParams(filters: AnalyticsFilters) {
   if (filters.deviceType) params.set('deviceType', filters.deviceType);
   if (filters.includeTest) params.set('includeTest', 'true');
   if (filters.includeInternal) params.set('includeInternal', 'true');
+  if (filters.includeTestCandidates) params.set('includeTestCandidates', 'true');
   return params;
 }
 

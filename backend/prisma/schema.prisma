@@ -209,12 +209,16 @@ model CandidateProfile {
   selectedCompensation   String?              @map("selected_compensation")
   selectedSkills         Json?                @map("selected_skills")
   roleSelectedAt         DateTime?            @map("role_selected_at")
+  isTestUser             Boolean              @default(false) @map("is_test_user")
+  testUserMarkedAt       DateTime?            @map("test_user_marked_at")
+  testUserMarkedByAdminId String?             @map("test_user_marked_by")
   createdAt         DateTime                  @default(now()) @map("created_at")
   updatedAt         DateTime                  @updatedAt @map("updated_at")
 
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   visitor          Visitor?
   selectedRole     JobRole?          @relation(fields: [selectedRoleId], references: [id], onDelete: SetNull)
+  testUserMarkedBy AdminUser?        @relation("TestUserMarkedBy", fields: [testUserMarkedByAdminId], references: [id], onDelete: SetNull)
   assessmentTokens AssessmentToken[]
   emailVerificationTokens EmailVerificationToken[]
   assessments      Assessment[]
@@ -223,6 +227,7 @@ model CandidateProfile {
 
   @@index([emailVerified])
   @@index([selectedRoleId])
+  @@index([isTestUser])
   @@map("candidate_profiles")
 }
 
@@ -432,6 +437,7 @@ model AdminUser {
   createdBy     AdminUser?  @relation("AdminCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAdmins AdminUser[] @relation("AdminCreatedBy")
   auditLogs     AuditLog[]
+  testUsersMarked CandidateProfile[] @relation("TestUserMarkedBy")
 
   @@map("admin_users")
 }

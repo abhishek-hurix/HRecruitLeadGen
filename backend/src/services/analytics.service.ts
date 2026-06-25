@@ -1,6 +1,7 @@
 import { CandidateAssessmentStatus, CandidateStatus, DeviceType, Prisma, SelectionStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { conversionRate } from '../utils/utm';
+import { realCandidateWhere, shouldExcludeTestCandidate } from '../utils/test-candidate';
 
 export interface AnalyticsFilters {
   dateFrom?: string;
@@ -11,6 +12,7 @@ export interface AnalyticsFilters {
   deviceType?: DeviceType;
   includeTest?: boolean;
   includeInternal?: boolean;
+  includeTestCandidates?: boolean;
 }
 
 export interface FunnelCounts {
@@ -35,6 +37,7 @@ type CandidateSnapshot = {
   candidateStatus: CandidateStatus;
   assessmentStatus: CandidateAssessmentStatus;
   selectionStatus: SelectionStatus;
+  isTestUser: boolean;
 };
 
 function buildVisitorWhere(filters: AnalyticsFilters): Prisma.VisitorWhereInput {
@@ -128,19 +131,31 @@ export class AnalyticsService {
             candidateStatus: true,
             assessmentStatus: true,
             selectionStatus: true,
+            isTestUser: true,
           },
         },
       },
     });
   }
 
+  private shouldSkipVisitor(
+    visitor: Awaited<ReturnType<typeof this.loadVisitors>>[number],
+    filters: AnalyticsFilters
+  ): boolean {
+    if (!visitor.candidateId || !visitor.candidate) return false;
+    return shouldExcludeTestCandidate(visitor.candidate.isTestUser, filters.includeTestCandidates);
+  }
+
   private aggregateByField(
     visitors: Awaited<ReturnType<typeof this.loadVisitors>>,
-    field: 'lastTouchSource' | 'lastTouchCampaign' | 'deviceType'
+    field: 'lastTouchSource' | 'lastTouchCampaign' | 'deviceType',
+    filters: AnalyticsFilters
   ) {
     const buckets = new Map<string, ReturnType<typeof emptyBucket>>();
 
     for (const v of visitors) {
+      if (this.shouldSkipVisitor(v, filters)) continue;
+
       const key =
         field === 'deviceType'
           ? v.deviceType
@@ -164,9 +179,10 @@ export class AnalyticsService {
   async getOverview(filters: AnalyticsFilters): Promise<FunnelCounts> {
     const visitors = await this.loadVisitors(filters);
     const bucket = emptyBucket();
-    bucket.visitors = visitors.length;
 
     for (const v of visitors) {
+      if (this.shouldSkipVisitor(v, filters)) continue;
+      bucket.visitors += 1;
       if (v.candidateId && v.candidate) {
         accumulateCandidate(bucket, v.candidate);
       }
@@ -177,7 +193,7 @@ export class AnalyticsService {
 
   async getSourceMetrics(filters: AnalyticsFilters): Promise<SourceMetricRow[]> {
     const visitors = await this.loadVisitors(filters);
-    return this.aggregateByField(visitors, 'lastTouchSource').map((r) => ({
+    return this.aggregateByField(visitors, 'lastTouchSource', filters).map((r) => ({
       source: r.key,
       visitors: r.visitors,
       registrations: r.registrations,
@@ -195,7 +211,7 @@ export class AnalyticsService {
 
   async getCampaignMetrics(filters: AnalyticsFilters) {
     const visitors = await this.loadVisitors(filters);
-    return this.aggregateByField(visitors, 'lastTouchCampaign')
+    return this.aggregateByField(visitors, 'lastTouchCampaign', filters)
       .filter((r) => r.key !== 'unknown')
       .map((r) => ({
         campaign: r.key,
@@ -215,7 +231,7 @@ export class AnalyticsService {
 
   async getDeviceMetrics(filters: AnalyticsFilters) {
     const visitors = await this.loadVisitors(filters);
-    return this.aggregateByField(visitors, 'deviceType').map((r) => ({
+    return this.aggregateByField(visitors, 'deviceType', filters).map((r) => ({
       device: r.key,
       visitors: r.visitors,
       registrations: r.registrations,
@@ -269,6 +285,7 @@ export class AnalyticsService {
       [`Generated: ${new Date().toISOString()}`],
       [`Include Test: ${filters.includeTest ? 'yes' : 'no'}`],
       [`Include Internal: ${filters.includeInternal ? 'yes' : 'no'}`],
+      [`Include Test Candidates: ${filters.includeTestCandidates ? 'yes' : 'no'}`],
       [],
       ['Real Traffic Overview'],
       ['Visitors', String(overview.visitors)],
@@ -310,7 +327,9 @@ export class AnalyticsService {
   }
 
   async exportCandidatesAttributionCSV(filters: AnalyticsFilters = {}) {
-    const hygieneWhere: Prisma.CandidateProfileWhereInput = {};
+    const hygieneWhere: Prisma.CandidateProfileWhereInput = {
+      ...realCandidateWhere(filters.includeTestCandidates === true),
+    };
     if (!filters.includeTest || !filters.includeInternal) {
       hygieneWhere.visitor = {
         ...(!filters.includeTest ? { isTest: false } : {}),
@@ -336,6 +355,7 @@ export class AnalyticsService {
       'Device',
       'Is Test',
       'Is Internal',
+      'Is Test User',
       'Registered At',
       'Assessment Status',
       'Selection Status',
@@ -353,6 +373,7 @@ export class AnalyticsService {
       c.attributionDevice || '',
       c.visitor?.isTest ? 'yes' : 'no',
       c.visitor?.isInternal ? 'yes' : 'no',
+      c.isTestUser ? 'yes' : 'no',
       c.createdAt.toISOString(),
       c.assessmentStatus,
       c.selectionStatus,

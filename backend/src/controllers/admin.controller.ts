@@ -34,7 +34,7 @@ export async function getDashboard(req: AuthRequest, res: Response, next: NextFu
 
 export async function getCandidates(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { search, status, experience, country, role, minScore, page, limit } = req.query;
+    const { search, status, experience, country, role, minScore, candidateType, page, limit } = req.query;
     const parsedMinScore = minScore !== undefined && minScore !== ''
       ? Number(minScore)
       : undefined;
@@ -45,6 +45,7 @@ export async function getCandidates(req: AuthRequest, res: Response, next: NextF
       country: country as string,
       role: role as string,
       minScore: Number.isFinite(parsedMinScore) ? parsedMinScore : undefined,
+      candidateType: (candidateType as 'real' | 'test' | 'all') || 'real',
       page: page ? parseInt(page as string) : 1,
       limit: limit ? parseInt(limit as string) : 20,
     });
@@ -88,12 +89,31 @@ export async function downloadCandidateResume(req: AuthRequest, res: Response, n
   }
 }
 
-export async function exportCSV(_req: AuthRequest, res: Response, next: NextFunction) {
+export async function exportCSV(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const csv = await adminService.exportCandidatesCSV();
+    const includeTestUsers = req.query.includeTestUsers === 'true' && req.adminRole === AdminRole.SUPER_ADMIN;
+    const csv = await adminService.exportCandidatesCSV(includeTestUsers);
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="candidates.csv"');
     res.send(csv);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function markTestUser(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const result = await adminService.markTestUser(String(req.params.id), req.adminId!);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function unmarkTestUser(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const result = await adminService.unmarkTestUser(String(req.params.id), req.adminId!);
+    res.json({ success: true, ...result });
   } catch (error) {
     next(error);
   }

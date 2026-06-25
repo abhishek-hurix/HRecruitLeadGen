@@ -61,6 +61,9 @@ export interface Candidate {
   score: number | null;
   submittedAt: string | null;
   createdAt: string;
+  isTestUser?: boolean;
+  testUserMarkedAt?: string | null;
+  testUserMarkedBy?: string | null;
 }
 
 export interface DashboardMetrics {

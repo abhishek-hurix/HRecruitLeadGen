@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Copy, Download, FileText, Phone } from 'lucide-react';
 import { ResumePreviewModal } from '../../components/admin/ResumePreviewModal';
 import { AdminLayout } from '../../components/layout/AdminLayout';
-import { getCandidateById, getCandidateResumePreviewUrl, getResumePreviewUrl, getSubmissionMarkdown } from '../../api/admin';
+import { TestUserBadge, TestUserConfirmModal } from '../../components/admin/TestUserConfirmModal';
+import { getCandidateById, getCandidateResumePreviewUrl, getResumePreviewUrl, getSubmissionMarkdown, markCandidateTestUser, unmarkCandidateTestUser } from '../../api/admin';
+import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { formatDate } from '../../utils/validation';
 import { formatSourceLabel } from '../../utils/utm';
 
@@ -16,6 +18,9 @@ export function CandidateDetailPage() {
   const [showAllResumes, setShowAllResumes] = useState(false);
   const [markdownPreview, setMarkdownPreview] = useState<{ content: string; filename: string } | null>(null);
   const [isOpeningMarkdown, setIsOpeningMarkdown] = useState(false);
+  const queryClient = useQueryClient();
+  const { isSuperAdmin } = useAdminAuth();
+  const [showTestUserModal, setShowTestUserModal] = useState(false);
   const [phoneCopied, setPhoneCopied] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ['candidate', id],
@@ -111,8 +116,35 @@ export function CandidateDetailPage() {
       </Link>
 
       <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <h1 className="text-xl font-bold text-hurix-charcoal">{data.fullName}</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-bold text-hurix-charcoal">{data.fullName}</h1>
+          {data.isTestUser && <TestUserBadge />}
+        </div>
+        {isSuperAdmin && (
+          <button
+            type="button"
+            onClick={() => setShowTestUserModal(true)}
+            className="btn-secondary text-sm"
+          >
+            {data.isTestUser ? 'Remove Test User' : 'Mark as Test User'}
+          </button>
+        )}
       </div>
+
+      {data.isTestUser && (
+        <div className="mb-4 card-premium p-4 border border-amber-200 bg-amber-50/50">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <TestUserBadge />
+            <span className="text-sm text-amber-900">Excluded from analytics and exports</span>
+          </div>
+          <p className="text-xs text-hurix-gray">
+            Marked By: <span className="font-medium text-hurix-charcoal">{data.testUserMarkedBy || '—'}</span>
+          </p>
+          <p className="text-xs text-hurix-gray mt-1">
+            Marked On: <span className="font-medium text-hurix-charcoal">{data.testUserMarkedAt ? formatDate(data.testUserMarkedAt) : '—'}</span>
+          </p>
+        </div>
+      )}
 
       <div className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {detailView === 'profile' && (
@@ -338,6 +370,23 @@ export function CandidateDetailPage() {
             </pre>
           </div>
         </div>
+      )}
+      {showTestUserModal && data && (
+        <TestUserConfirmModal
+          candidateName={data.fullName}
+          isTestUser={Boolean(data.isTestUser)}
+          onConfirm={async () => {
+            if (data.isTestUser) {
+              await unmarkCandidateTestUser(data.id);
+            } else {
+              await markCandidateTestUser(data.id);
+            }
+            await queryClient.invalidateQueries({ queryKey: ['candidate', id] });
+            await queryClient.invalidateQueries({ queryKey: ['candidates'] });
+            await queryClient.invalidateQueries({ queryKey: ['analytics-overview'] });
+          }}
+          onClose={() => setShowTestUserModal(false)}
+        />
       )}
     </AdminLayout>
   );
