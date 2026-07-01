@@ -24,7 +24,7 @@ describe('Phone validation', () => {
   });
 
   it('rejects invalid numbers', () => {
-    expect(() => parseAndValidatePhone('IN', '123')).toThrow('Invalid phone number');
+    expect(() => parseAndValidatePhone('IN', '123')).toThrow('Please enter 10 digits for India.');
     expect(isValidPhoneForCountry('IN', '123')).toBe(false);
   });
 

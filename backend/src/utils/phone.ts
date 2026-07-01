@@ -1,4 +1,5 @@
 import { parsePhoneNumberFromString, CountryCode, getCountries } from 'libphonenumber-js';
+import { Metadata, validatePhoneNumberLength } from 'libphonenumber-js/mobile';
 import { AppError } from './errors';
 
 export interface ParsedPhone {
@@ -59,6 +60,45 @@ export function isoToFlag(iso: string): string {
     .replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
 }
 
+export function getExpectedMobilePhoneDigitLabel(countryIso: string): string {
+  const metadata = new Metadata();
+  metadata.selectNumberingPlan(countryIso.toUpperCase() as CountryCode);
+  const plan = metadata.numberingPlan as {
+    type?: (phoneType: string) => { possibleLengths?: () => number[] };
+  } | undefined;
+  const lengths = plan?.type?.('MOBILE')?.possibleLengths?.() || [];
+
+  if (lengths.length === 0) return '';
+  if (lengths.length === 1) return String(lengths[0]);
+  if (lengths.length === 2) return `${lengths[0]} or ${lengths[1]}`;
+  return `${lengths[0]}-${lengths[lengths.length - 1]}`;
+}
+
+export function getPhoneValidationErrorMessage(countryIso: string, nationalNumber: string): string | null {
+  const digits = nationalNumber.replace(/\D/g, '');
+  if (!digits) return 'Phone number is required';
+
+  if (isValidPhoneForCountry(countryIso, digits)) return null;
+
+  const iso = countryIso.toUpperCase() as CountryCode;
+  const countryName = getCountryName(iso);
+  const expectedDigits = getExpectedMobilePhoneDigitLabel(iso);
+  const lengthIssue = validatePhoneNumberLength(digits, iso);
+
+  if (
+    expectedDigits &&
+    (lengthIssue === 'TOO_SHORT' || lengthIssue === 'TOO_LONG' || lengthIssue === 'INVALID_LENGTH')
+  ) {
+    return `Please enter ${expectedDigits} digits for ${countryName}.`;
+  }
+
+  if (expectedDigits) {
+    return `Please enter ${expectedDigits} digits for ${countryName}.`;
+  }
+
+  return `Please enter a valid phone number for ${countryName}.`;
+}
+
 export function parseAndValidatePhone(
   countryIso: string,
   nationalNumber: string
@@ -72,7 +112,8 @@ export function parseAndValidatePhone(
   const phone = parsePhoneNumberFromString(digits, iso);
 
   if (!phone || !phone.isValid()) {
-    throw new AppError(400, 'Invalid phone number for the selected country');
+    const message = getPhoneValidationErrorMessage(iso, nationalNumber);
+    throw new AppError(400, message || 'Invalid phone number for the selected country');
   }
 
   return {

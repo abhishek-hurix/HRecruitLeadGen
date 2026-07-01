@@ -24,13 +24,16 @@ export async function getCandidateJobRoles() {
   }>;
 }
 
-export async function updateCandidatePhone(phone: string): Promise<{
+export async function updateCandidatePhone(payload: {
+  phoneCountryIso: string;
+  phoneNumber: string;
+}): Promise<{
   phone: string;
   phoneNumber: string;
   countryCode: string;
   phoneCountry: string;
 }> {
-  const { data } = await api.patch('/candidate/phone', { phone });
+  const { data } = await api.patch('/candidate/phone', payload);
   return data.data;
 }
 
