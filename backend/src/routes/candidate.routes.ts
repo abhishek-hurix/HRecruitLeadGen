@@ -7,6 +7,7 @@ import {
   getCandidateDashboard,
   getCandidateJobRoles,
   setPrimaryCandidateResume,
+  updateCandidatePhone,
   uploadCandidateResume,
 } from '../controllers/candidate-portal.controller';
 import { getAssessmentAccess } from '../controllers/candidate-auth.controller';
@@ -19,6 +20,7 @@ const router = Router();
 
 router.use(authenticateCandidatePortal);
 router.get('/dashboard', getCandidateDashboard);
+router.patch('/phone', updateCandidatePhone);
 router.get('/job-roles', getCandidateJobRoles);
 router.post('/resumes', uploadResume.single('resume'), uploadCandidateResume);
 router.patch('/resumes/primary', setPrimaryCandidateResume);

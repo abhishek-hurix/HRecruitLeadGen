@@ -24,6 +24,16 @@ export async function getCandidateJobRoles() {
   }>;
 }
 
+export async function updateCandidatePhone(phone: string): Promise<{
+  phone: string;
+  phoneNumber: string;
+  countryCode: string;
+  phoneCountry: string;
+}> {
+  const { data } = await api.patch('/candidate/phone', { phone });
+  return data.data;
+}
+
 export async function resendVerificationEmail(): Promise<{ message: string }> {
   const { data } = await api.post('/candidate/resend-verification');
   return data;

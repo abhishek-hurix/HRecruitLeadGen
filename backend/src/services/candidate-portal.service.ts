@@ -4,6 +4,7 @@ import { AppError } from '../utils/errors';
 import { assessmentTokenService } from './assessment-token.service';
 import { getExperienceLabel } from '../utils/experience';
 import { storage } from './storage/storage.service';
+import { getCountryIsoByName, parseAndValidatePhoneInput } from '../utils/phone';
 
 export class CandidatePortalService {
   async getDashboard(candidateId: string) {
@@ -209,6 +210,32 @@ export class CandidatePortalService {
       },
       journeyStatus,
       history,
+    };
+  }
+
+  async updatePhone(candidateId: string, phoneInput: string) {
+    const candidate = await prisma.candidateProfile.findUnique({ where: { id: candidateId } });
+    if (!candidate) throw new AppError(404, 'Candidate not found');
+
+    const countryIso = getCountryIsoByName(candidate.phoneCountry) || 'IN';
+    const parsedPhone = parseAndValidatePhoneInput(countryIso, phoneInput);
+
+    const updated = await prisma.candidateProfile.update({
+      where: { id: candidateId },
+      data: {
+        phone: parsedPhone.phoneNumber,
+        countryCode: parsedPhone.countryCode,
+        phoneNumber: parsedPhone.phoneNumber,
+        fullPhone: parsedPhone.fullPhone,
+        phoneCountry: parsedPhone.phoneCountry,
+      },
+    });
+
+    return {
+      phone: updated.fullPhone || updated.phone,
+      phoneNumber: updated.phoneNumber || updated.phone,
+      countryCode: updated.countryCode,
+      phoneCountry: updated.phoneCountry,
     };
   }
 

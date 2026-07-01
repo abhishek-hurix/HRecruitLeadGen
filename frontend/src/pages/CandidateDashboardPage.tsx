@@ -17,6 +17,7 @@ import {
   MapPin,
   DollarSign,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 import { ResumePreviewModal } from '../components/admin/ResumePreviewModal';
 import { CandidateLayout } from '../components/layout/CandidateLayout';
@@ -28,6 +29,7 @@ import {
   getCandidateResumePreviewUrl,
   resendVerificationEmail,
   setPrimaryCandidateResume,
+  updateCandidatePhone,
   uploadCandidateResume,
 } from '../api/candidate';
 import { initSessionAuth, selectRoleAndStart } from '../api/assessment';
@@ -72,6 +74,9 @@ export function CandidateDashboardPage() {
   const [resumePreview, setResumePreview] = useState<{ url: string; filename: string } | null>(null);
   const [openingResumeId, setOpeningResumeId] = useState<string | null>(null);
   const [deletingResumeId, setDeletingResumeId] = useState<string | null>(null);
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneDraft, setPhoneDraft] = useState('');
+  const [savingPhone, setSavingPhone] = useState(false);
   const resumeInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading, error } = useQuery({
@@ -107,6 +112,12 @@ export function CandidateDashboardPage() {
     }
   }, [data?.profile.resumes, primaryResumeMode]);
 
+  useEffect(() => {
+    if (data?.profile.phone && !editingPhone) {
+      setPhoneDraft(data.profile.phone);
+    }
+  }, [data?.profile.phone, editingPhone]);
+
   useEffect(() => () => {
     if (resumePreview) {
       window.URL.revokeObjectURL(resumePreview.url);
@@ -128,6 +139,21 @@ export function CandidateDashboardPage() {
       }
     } finally {
       setResending(false);
+    }
+  };
+
+  const handleSavePhone = async () => {
+    setSavingPhone(true);
+    setActionError('');
+    try {
+      const result = await updateCandidatePhone(phoneDraft);
+      setPhoneDraft(result.phone);
+      setEditingPhone(false);
+      await queryClient.invalidateQueries({ queryKey: ['candidate-dashboard'] });
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Failed to update phone number.'));
+    } finally {
+      setSavingPhone(false);
     }
   };
 
@@ -631,8 +657,35 @@ export function CandidateDashboardPage() {
                 <p className="font-medium break-all">{data.profile.email}</p>
               </div>
               <div>
-                <p className="text-hurix-gray mb-1">Phone Number</p>
-                <p className="font-medium">{data.profile.phone}</p>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="text-hurix-gray">Phone Number</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editingPhone) {
+                        handleSavePhone();
+                      } else {
+                        setPhoneDraft(data.profile.phone);
+                        setEditingPhone(true);
+                      }
+                    }}
+                    disabled={savingPhone || (editingPhone && phoneDraft.trim().length < 8)}
+                    className="text-xs font-semibold text-hurix-blue hover:underline disabled:opacity-60"
+                  >
+                    {savingPhone ? 'Saving...' : editingPhone ? 'Save' : <Pencil size={14} />}
+                  </button>
+                </div>
+                {editingPhone ? (
+                  <input
+                    value={phoneDraft}
+                    onChange={(event) => setPhoneDraft(event.target.value.replace(/[^\d+\s-]/g, ''))}
+                    className="w-full border-0 border-b border-slate-200 bg-transparent px-0 py-1 text-sm font-medium text-hurix-blue outline-none focus:border-hurix-blue"
+                    placeholder="+919876543210"
+                    inputMode="tel"
+                  />
+                ) : (
+                  <p className="font-medium">{data.profile.phone}</p>
+                )}
               </div>
               <div>
                 <p className="text-hurix-gray mb-1">Country</p>
