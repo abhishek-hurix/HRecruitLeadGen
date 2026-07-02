@@ -21,6 +21,22 @@ export async function getCandidateJobRoles(_req: AuthRequest, res: Response, nex
   }
 }
 
+export async function updateCandidatePhone(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const phoneCountryIso = String(req.body.phoneCountryIso || '').trim();
+    const phoneNumber = String(req.body.phoneNumber || '').trim();
+    const phone = String(req.body.phone || '').trim();
+
+    const data = phoneCountryIso && phoneNumber
+      ? await candidatePortalService.updatePhone(req.candidateId!, { phoneCountryIso, phoneNumber })
+      : await candidatePortalService.updatePhone(req.candidateId!, { phone });
+
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function uploadCandidateResume(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const resume = req.file;

@@ -4,6 +4,7 @@ import { AppError } from '../utils/errors';
 import { assessmentTokenService } from './assessment-token.service';
 import { getExperienceLabel } from '../utils/experience';
 import { storage } from './storage/storage.service';
+import { getCountryIsoByName, getPhoneValidationErrorMessage, parseAndValidatePhone, parseAndValidatePhoneInput } from '../utils/phone';
 
 export class CandidatePortalService {
   async getDashboard(candidateId: string) {
@@ -209,6 +210,45 @@ export class CandidatePortalService {
       },
       journeyStatus,
       history,
+    };
+  }
+
+  async updatePhone(
+    candidateId: string,
+    input: { phoneCountryIso?: string; phoneNumber?: string; phone?: string }
+  ) {
+    const candidate = await prisma.candidateProfile.findUnique({ where: { id: candidateId } });
+    if (!candidate) throw new AppError(404, 'Candidate not found');
+
+    let parsedPhone;
+    if (input.phoneCountryIso && input.phoneNumber) {
+      const countryIso = input.phoneCountryIso.toUpperCase();
+      const validationError = getPhoneValidationErrorMessage(countryIso, input.phoneNumber);
+      if (validationError) {
+        throw new AppError(400, validationError);
+      }
+      parsedPhone = parseAndValidatePhone(countryIso, input.phoneNumber);
+    } else {
+      const countryIso = getCountryIsoByName(candidate.phoneCountry) || 'IN';
+      parsedPhone = parseAndValidatePhoneInput(countryIso, input.phone || '');
+    }
+
+    const updated = await prisma.candidateProfile.update({
+      where: { id: candidateId },
+      data: {
+        phone: parsedPhone.phoneNumber,
+        countryCode: parsedPhone.countryCode,
+        phoneNumber: parsedPhone.phoneNumber,
+        fullPhone: parsedPhone.fullPhone,
+        phoneCountry: parsedPhone.phoneCountry,
+      },
+    });
+
+    return {
+      phone: updated.fullPhone || updated.phone,
+      phoneNumber: updated.phoneNumber || updated.phone,
+      countryCode: updated.countryCode,
+      phoneCountry: updated.phoneCountry,
     };
   }
 

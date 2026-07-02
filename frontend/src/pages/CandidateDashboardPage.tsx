@@ -17,8 +17,10 @@ import {
   MapPin,
   DollarSign,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 import { ResumePreviewModal } from '../components/admin/ResumePreviewModal';
+import { CountryPhoneInput } from '../components/registration/CountryPhoneInput';
 import { CandidateLayout } from '../components/layout/CandidateLayout';
 import {
   deleteCandidateResume,
@@ -28,12 +30,14 @@ import {
   getCandidateResumePreviewUrl,
   resendVerificationEmail,
   setPrimaryCandidateResume,
+  updateCandidatePhone,
   uploadCandidateResume,
 } from '../api/candidate';
 import { initSessionAuth, selectRoleAndStart } from '../api/assessment';
 import { clearCandidateToken, getCandidateToken, setCandidateToken } from '../api/client';
 import { getApiErrorMessage, isLinkExpiredError, getApiErrorStatus } from '../utils/apiErrors';
-import { getCountryNameFromDialCode } from '../utils/countries';
+import { getCountryNameFromDialCode, getPhoneSaveValidationError, splitProfilePhone } from '../utils/countries';
+import type { CountryCode } from 'libphonenumber-js';
 import { isMobilePhone } from '../utils/device';
 import { formatDate, isPdfFile } from '../utils/validation';
 
@@ -72,6 +76,11 @@ export function CandidateDashboardPage() {
   const [resumePreview, setResumePreview] = useState<{ url: string; filename: string } | null>(null);
   const [openingResumeId, setOpeningResumeId] = useState<string | null>(null);
   const [deletingResumeId, setDeletingResumeId] = useState<string | null>(null);
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneCountryIso, setPhoneCountryIso] = useState<CountryCode>('IN');
+  const [phoneNumberDraft, setPhoneNumberDraft] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [savingPhone, setSavingPhone] = useState(false);
   const resumeInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading, error } = useQuery({
@@ -107,6 +116,18 @@ export function CandidateDashboardPage() {
     }
   }, [data?.profile.resumes, primaryResumeMode]);
 
+  useEffect(() => {
+    if (!data?.profile.phone || editingPhone) return;
+    const split = splitProfilePhone(
+      data.profile.phone,
+      data.profile.phoneNumber || '',
+      data.profile.countryCode,
+      data.profile.phoneCountry
+    );
+    setPhoneCountryIso(split.iso);
+    setPhoneNumberDraft(split.nationalNumber);
+  }, [data?.profile.phone, data?.profile.phoneNumber, data?.profile.countryCode, data?.profile.phoneCountry, editingPhone]);
+
   useEffect(() => () => {
     if (resumePreview) {
       window.URL.revokeObjectURL(resumePreview.url);
@@ -129,6 +150,45 @@ export function CandidateDashboardPage() {
     } finally {
       setResending(false);
     }
+  };
+
+  const handleSavePhone = async () => {
+    const validationError = getPhoneSaveValidationError(phoneCountryIso, phoneNumberDraft);
+    if (validationError) {
+      setPhoneError(validationError);
+      return;
+    }
+
+    setSavingPhone(true);
+    setActionError('');
+    setPhoneError('');
+    try {
+      const result = await updateCandidatePhone({
+        phoneCountryIso,
+        phoneNumber: phoneNumberDraft.replace(/\D/g, ''),
+      });
+      setPhoneNumberDraft(result.phoneNumber);
+      setEditingPhone(false);
+      await queryClient.invalidateQueries({ queryKey: ['candidate-dashboard'] });
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Failed to update phone number.'));
+    } finally {
+      setSavingPhone(false);
+    }
+  };
+
+  const startPhoneEdit = () => {
+    if (!data) return;
+    const split = splitProfilePhone(
+      data.profile.phone,
+      data.profile.phoneNumber || '',
+      data.profile.countryCode,
+      data.profile.phoneCountry
+    );
+    setPhoneCountryIso(split.iso);
+    setPhoneNumberDraft(split.nationalNumber);
+    setPhoneError('');
+    setEditingPhone(true);
   };
 
   const handleStartAssessment = async () => {
@@ -631,8 +691,42 @@ export function CandidateDashboardPage() {
                 <p className="font-medium break-all">{data.profile.email}</p>
               </div>
               <div>
-                <p className="text-hurix-gray mb-1">Phone Number</p>
-                <p className="font-medium">{data.profile.phone}</p>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="text-hurix-gray">Phone Number</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editingPhone) {
+                        handleSavePhone();
+                      } else {
+                        startPhoneEdit();
+                      }
+                    }}
+                    disabled={savingPhone || (editingPhone && !phoneNumberDraft.trim())}
+                    className="text-xs font-semibold text-hurix-blue hover:underline disabled:opacity-60"
+                  >
+                    {savingPhone ? 'Saving...' : editingPhone ? 'Save' : <Pencil size={14} />}
+                  </button>
+                </div>
+                {editingPhone ? (
+                  <CountryPhoneInput
+                    variant="profile"
+                    hideLabel
+                    countryIso={phoneCountryIso}
+                    phoneNumber={phoneNumberDraft}
+                    onCountryChange={(iso) => {
+                      setPhoneCountryIso(iso);
+                      setPhoneError('');
+                    }}
+                    onPhoneChange={(value) => {
+                      setPhoneNumberDraft(value);
+                      setPhoneError('');
+                    }}
+                    error={phoneError}
+                  />
+                ) : (
+                  <p className="font-medium">{data.profile.phone}</p>
+                )}
               </div>
               <div>
                 <p className="text-hurix-gray mb-1">Country</p>

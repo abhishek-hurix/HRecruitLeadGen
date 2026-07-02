@@ -14,6 +14,8 @@ interface CountryPhoneInputProps {
   onCountryChange: (iso: CountryCode) => void;
   onPhoneChange: (value: string) => void;
   error?: string;
+  variant?: 'default' | 'profile';
+  hideLabel?: boolean;
 }
 
 export function CountryPhoneInput({
@@ -22,6 +24,8 @@ export function CountryPhoneInput({
   onCountryChange,
   onPhoneChange,
   error,
+  variant = 'default',
+  hideLabel = false,
 }: CountryPhoneInputProps) {
   const countries = useMemo(() => buildCountryList(), []);
   const selected = countries.find((c) => c.iso === countryIso) ||
@@ -56,15 +60,25 @@ export function CountryPhoneInput({
     onPhoneChange(value.replace(/[^\d\s-]/g, ''));
   };
 
+  const isProfile = variant === 'profile';
+  const countryButtonClass = isProfile
+    ? 'flex min-w-[118px] items-center justify-between gap-2 border-0 border-b border-slate-200 bg-transparent px-0 py-1 text-sm font-medium text-hurix-blue outline-none'
+    : 'input-field flex items-center gap-2 min-w-[140px] sm:min-w-[160px] justify-between px-3';
+  const phoneInputClass = isProfile
+    ? 'min-w-0 flex-1 border-0 border-b border-slate-200 bg-transparent px-0 py-1 text-sm font-medium text-hurix-blue outline-none focus:border-hurix-blue'
+    : 'input-field flex-1 min-w-0';
+
   return (
     <div ref={containerRef}>
-      <label className="block text-sm font-medium mb-1">Phone Number *</label>
+      {!hideLabel && (
+        <label className="block text-sm font-medium mb-1">Phone Number *</label>
+      )}
       <div className="flex gap-2">
         <div className="relative shrink-0">
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="input-field flex items-center gap-2 min-w-[140px] sm:min-w-[160px] justify-between px-3"
+            className={countryButtonClass}
             aria-haspopup="listbox"
             aria-expanded={open}
           >
@@ -123,18 +137,20 @@ export function CountryPhoneInput({
         <input
           type="tel"
           inputMode="numeric"
-          className="input-field flex-1 min-w-0"
+          className={phoneInputClass}
           value={phoneNumber}
           onChange={(e) => handlePhoneInput(e.target.value)}
           placeholder={countryIso === 'IN' ? '9876543210' : 'Phone number'}
           aria-label="Phone number"
         />
       </div>
-      <p className="text-xs text-hurix-gray mt-1">
-        {selected.flag} {selected.name} ({selected.dialCode})
-      </p>
+      {!isProfile && (
+        <p className="text-xs text-hurix-gray mt-1">
+          {selected.flag} {selected.name} ({selected.dialCode})
+        </p>
+      )}
       {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
-      {phoneNumber && !isValidNationalPhone(countryIso, phoneNumber) && !error && (
+      {phoneNumber && !isValidNationalPhone(countryIso, phoneNumber) && !error && !isProfile && (
         <p className="text-amber-600 text-xs mt-1">Enter a valid number for {selected.name}</p>
       )}
     </div>
