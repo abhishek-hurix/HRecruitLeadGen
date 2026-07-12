@@ -16,6 +16,7 @@ import { AdminLoginPage } from './pages/admin/LoginPage';
 import { JobRolesPage } from './pages/admin/JobRolesPage';
 import { DashboardPage } from './pages/admin/DashboardPage';
 import { CandidatesPage } from './pages/admin/CandidatesPage';
+import { AddCandidatePage } from './pages/admin/AddCandidatePage';
 import { DeletedCandidatesPage } from './pages/admin/DeletedCandidatesPage';
 import { CandidateDetailPage } from './pages/admin/CandidateDetailPage';
 import { QuestionsPage } from './pages/admin/QuestionsPage';
@@ -56,6 +57,7 @@ export default function App() {
       <Route path="/admin/access-denied" element={<AdminRoute><AccessDeniedPage /></AdminRoute>} />
       <Route path="/admin/dashboard" element={<AdminRoute permission="view_dashboard"><DashboardPage /></AdminRoute>} />
       <Route path="/admin/candidates" element={<AdminRoute permission="view_candidates"><CandidatesPage /></AdminRoute>} />
+      <Route path="/admin/candidates/new" element={<AdminRoute permission="manage_candidates"><AddCandidatePage /></AdminRoute>} />
       <Route path="/admin/deleted-candidates" element={<AdminRoute permission="view_deleted_candidates"><DeletedCandidatesPage /></AdminRoute>} />
       <Route path="/admin/job-roles" element={<AdminRoute permission="view_job_roles"><JobRolesPage /></AdminRoute>} />
       <Route path="/admin/candidates/:id" element={<AdminRoute permission="view_candidates"><CandidateDetailPage /></AdminRoute>} />

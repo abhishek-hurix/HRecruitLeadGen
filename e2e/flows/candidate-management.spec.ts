@@ -447,6 +447,66 @@ test.describe('Candidate Management phase 2', () => {
       });
     });
 
+    await page.route('**/api/admin/search**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            query: 'al',
+            limits: { perGroup: 8, minLength: 2, maxLength: 100 },
+            candidates: [
+              {
+                type: 'candidate',
+                id: '11111111-1111-1111-1111-111111111111',
+                applicationId: '11111111',
+                fullName: 'Alice AdminTest',
+                email: 'alice@example.com',
+                assessmentStatus: 'NOT_STARTED',
+                assignedRole: 'Engineer',
+              },
+            ],
+            jobRoles: [{ type: 'jobRole', id: 'role-1', name: 'Engineer', status: 'ACTIVE' }],
+            assessments: [],
+          },
+        }),
+      });
+    });
+
+    await page.route('**/api/admin/job-roles**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: [{ id: 'role-1', title: 'Engineer', status: 'ACTIVE' }],
+        }),
+      });
+    });
+
+    await page.route('**/api/admin/candidates', async (route) => {
+      if (route.request().method() === 'POST') {
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            candidateCreated: true,
+            invitationSent: true,
+            candidate: {
+              id: 'new-id',
+              applicationId: 'ABCDEF12',
+              fullName: 'Manual Person',
+              email: 'manual@example.com',
+            },
+          }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
     await page.route('**/api/admin/candidates/*/score-breakdown**', async (route) => {
       await route.fulfill({
         status: 200,
@@ -625,6 +685,32 @@ test.describe('Candidate Management phase 2', () => {
     await expect(page.getByRole('heading', { name: /Activity Timeline/i })).toBeVisible();
     await expect(page.getByText(/Candidate registered/i)).toBeVisible();
     await expect(page.getByText(/Owner assigned/i)).toBeVisible();
+  });
+
+  test('global search opens candidate', async ({ page }) => {
+    await page.goto('/admin/candidates');
+    const search = page.locator('.hidden.lg\\:flex [aria-label="Global admin search"]');
+    await search.fill('al');
+    await expect(page.getByText('Alice AdminTest').first()).toBeVisible();
+    await page.getByText('Alice AdminTest').first().click();
+    await expect(page).toHaveURL(/\/admin\/candidates\/11111111/);
+  });
+
+  test('sidebar stays active on nested candidate routes', async ({ page }) => {
+    await page.goto('/admin/candidates/new');
+    await expect(page.locator('[data-nav="/admin/candidates"][aria-current="page"]').first()).toBeVisible();
+  });
+
+  test('add candidate form validates and submits', async ({ page }) => {
+    await page.goto('/admin/candidates/new');
+    await expect(page.getByRole('heading', { name: /Add Candidate/i })).toBeVisible();
+    await page.getByLabel(/Full Name/i).fill('Manual Person');
+    await page.getByLabel(/^Email/i).fill('manual@example.com');
+    await page.getByLabel(/^Experience/i).selectOption('FRESHER');
+    await page.getByLabel(/^Job Role/i).selectOption('role-1');
+    await page.getByLabel(/Phone Number/i).fill('9876543210');
+    await page.getByRole('button', { name: /Save and Send Assessment Invitation/i }).click();
+    await expect(page.getByText(/Candidate created/i)).toBeVisible({ timeout: 10000 });
   });
 
   test('empty state clear filters', async ({ page }) => {

@@ -136,6 +136,90 @@ export async function getCandidateById(req: AuthRequest, res: Response, next: Ne
   }
 }
 
+export async function globalSearch(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { globalAdminSearch } = await import('../services/admin-search.service');
+    const q = String(req.query.q ?? req.query.query ?? '');
+    const data = await globalAdminSearch(q);
+    res.json({ success: true, data, requestId: req.requestId });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function checkDuplicateCandidate(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { checkCandidateDuplicate } = await import('../services/admin-candidate-create.service');
+    const email = String(req.query.email ?? req.body?.email ?? '');
+    const data = await checkCandidateDuplicate(email);
+    res.json({ success: true, data, requestId: req.requestId });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createCandidate(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { createManualCandidate } = await import('../services/admin-candidate-create.service');
+    const idempotencyKey =
+      String(req.headers['idempotency-key'] || req.body?.idempotencyKey || '').trim();
+    if (!idempotencyKey || idempotencyKey.length < 8) {
+      const { AppError } = await import('../utils/errors');
+      throw new AppError(400, 'Idempotency-Key header is required (min 8 characters)');
+    }
+
+    let skills = req.body.skills;
+    if (typeof skills === 'string') {
+      try {
+        skills = JSON.parse(skills);
+      } catch {
+        skills = skills.split(',').map((s: string) => s.trim()).filter(Boolean);
+      }
+    }
+
+    const allowDuplicateOverride =
+      req.body.allowDuplicateOverride === true ||
+      req.body.allowDuplicateOverride === 'true' ||
+      req.body.allowDuplicateOverride === '1';
+
+    const sendInvitation =
+      req.body.sendInvitation === undefined
+        ? true
+        : !(req.body.sendInvitation === false || req.body.sendInvitation === 'false');
+
+    const data = await createManualCandidate({
+      input: {
+        fullName: req.body.fullName,
+        email: req.body.email,
+        phoneCountryIso: req.body.phoneCountryIso || req.body.countryCode,
+        phoneNumber: req.body.phoneNumber || req.body.phone,
+        experienceCategory: req.body.experienceCategory || req.body.experience,
+        jobRoleId: req.body.jobRoleId,
+        linkedinUrl: req.body.linkedinUrl,
+        currentCompany: req.body.currentCompany,
+        currentDesignation: req.body.currentDesignation,
+        noticePeriod: req.body.noticePeriod,
+        expectedSalaryAmount: req.body.expectedSalaryAmount,
+        expectedSalaryCurrency: req.body.expectedSalaryCurrency,
+        sourceType: req.body.sourceType,
+        sourceDetail: req.body.sourceDetail || req.body.referralCode,
+        skills,
+        allowDuplicateOverride,
+        duplicateOverrideReason: req.body.duplicateOverrideReason,
+        sendInvitation,
+      },
+      resumeFile: req.file || null,
+      adminUserId: req.adminId!,
+      adminRole: req.adminRole!,
+      idempotencyKey,
+    });
+
+    res.status(201).json({ ...data, requestId: req.requestId });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function downloadResume(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { buffer, filename } = await adminService.getResume(String(req.params.id));

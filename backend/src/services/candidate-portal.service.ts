@@ -259,7 +259,8 @@ export class CandidatePortalService {
     });
     if (!candidate) throw new AppError(404, 'Candidate not found');
 
-    const filePath = await storage.save(resumeFile, 'resumes');
+    const saved = await storage.save(resumeFile, 'resumes');
+    const filePath = typeof saved === 'string' ? saved : saved.path;
     const shouldBePrimary = candidate.resumes.length === 0 && !candidate.resumePath;
 
     try {
@@ -269,6 +270,10 @@ export class CandidatePortalService {
             candidateId,
             fileName: resumeFile.originalname || 'resume.pdf',
             filePath,
+            storagePath: filePath,
+            mimeType: resumeFile.mimetype || 'application/pdf',
+            sizeBytes: resumeFile.size || null,
+            uploadedAt: new Date(),
             isPrimary: shouldBePrimary,
           },
         });

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { formatRelativeTime, activityTypeLabel, formatIstDateTime } from '../../utils/activity';
 import { cycleSort } from '../../utils/candidate-list-ui';
 import { filtersToBackendSnapshot } from '../../types/candidate-management';
+import { validateResumePdf } from '../../utils/resume-validation';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -22,6 +23,21 @@ describe('activity utils', () => {
   });
 });
 
+describe('resume validation', () => {
+  it('accepts pdf under 10mb', () => {
+    const file = new File([new Uint8Array(100)], 'cv.pdf', { type: 'application/pdf' });
+    expect(validateResumePdf(file).ok).toBe(true);
+  });
+
+  it('rejects non-pdf and oversized', () => {
+    const bad = validateResumePdf(new File(['x'], 'x.png', { type: 'image/png' }));
+    expect(bad.ok).toBe(false);
+    const big = new File([new Uint8Array([1])], 'big.pdf', { type: 'application/pdf' });
+    Object.defineProperty(big, 'size', { value: 11 * 1024 * 1024 });
+    expect(validateResumePdf(big).ok).toBe(false);
+  });
+});
+
 describe('sort cycle and filter snapshot', () => {
   it('cycles asc → desc → default', () => {
     expect(cycleSort(null, null, 'name')).toEqual({ sortBy: 'name', sortOrder: 'asc' });
@@ -38,17 +54,17 @@ describe('sort cycle and filter snapshot', () => {
       countryCodes: ['IN'],
       minScore: '',
       role: 'all',
-      roleAssignment: 'unassigned',
+      roleAssignment: 'all',
       registeredFrom: '',
       registeredTo: '',
       datePreset: '',
       ownerId: 'unassigned',
-      inactivityDays: '30',
-      sortBy: 'lastActivity',
-      sortOrder: 'asc',
+      inactivityDays: '7',
+      sortBy: 'score',
+      sortOrder: 'desc',
     });
     expect(snap.ownerId).toBe('unassigned');
-    expect(snap.inactivityDays).toBe(30);
+    expect(snap.inactivityDays).toBe(7);
     expect(snap.countryCodes).toEqual(['IN']);
   });
 });

@@ -17,6 +17,9 @@ import {
   getCandidateActivity,
   assignOwner,
   listOwners,
+  globalSearch,
+  checkDuplicateCandidate,
+  createCandidate,
   downloadCandidateResume,
   downloadResume,
   exportCSV,
@@ -58,6 +61,7 @@ import {
   getCalendarStatus,
 } from '../controllers/candidate-management.controller';
 import analyticsRoutes from './analytics.routes';
+import { uploadResume } from '../middleware/upload';
 
 const router = Router();
 
@@ -134,7 +138,15 @@ router.use(authenticateAdmin);
 router.get('/me', getMe);
 router.get('/dashboard', requirePermission(Permission.VIEW_DASHBOARD), getDashboard);
 router.get('/countries', requirePermission(Permission.VIEW_CANDIDATES), getCountriesList);
+router.get('/search', requirePermission(Permission.VIEW_CANDIDATES), globalSearch);
 router.get('/candidate-owners', requirePermission(Permission.VIEW_CANDIDATES), listOwners);
+router.get('/candidates/duplicate-check', requirePermission(Permission.MANAGE_CANDIDATES), checkDuplicateCandidate);
+router.post(
+  '/candidates',
+  requirePermission(Permission.MANAGE_CANDIDATES),
+  uploadResume.single('resume'),
+  createCandidate
+);
 router.get('/candidates', requirePermission(Permission.VIEW_CANDIDATES), getCandidates);
 router.get('/candidates/export', requirePermission(Permission.EXPORT_CANDIDATES), exportCSV);
 router.post('/candidates/export', exportLimiter, requirePermission(Permission.EXPORT_CANDIDATES), exportCandidates);

@@ -52,7 +52,7 @@ export const config = {
     },
   },
   upload: {
-    maxFileSizeMb: parseInt(process.env.MAX_RESUME_SIZE_MB || '5', 10),
+    maxFileSizeMb: parseInt(process.env.MAX_RESUME_SIZE_MB || '10', 10),
     uploadDir: process.env.UPLOAD_DIR || './uploads/resumes',
   },
   assessment: {

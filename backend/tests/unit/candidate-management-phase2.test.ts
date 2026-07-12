@@ -8,6 +8,8 @@ import { istInclusiveRangeToUtc, resolveDatePreset } from '../../src/utils/ist-d
 import { resolveCountryIso } from '../../src/utils/country';
 import { buildCandidateListOrderBy, buildCandidateListWhere } from '../../src/services/candidate-selection.service';
 import { AppError } from '../../src/utils/errors';
+import { assertValidPdfUpload } from '../../src/utils/pdf-validation';
+import { applicationIdFromUuid, normalizeEmail } from '../../src/utils/application-id';
 
 describe('candidate list query validation', () => {
   it('rejects invalid country codes', () => {
@@ -124,5 +126,70 @@ describe('country normalization', () => {
 
   it('reports unmapped values', () => {
     expect(reportUnmappedCountryValue('Narnia')).toEqual({ raw: 'Narnia', resolved: null });
+  });
+});
+
+describe('PDF validation', () => {
+  it('accepts valid PDF magic bytes', () => {
+    const file = {
+      mimetype: 'application/pdf',
+      size: 100,
+      originalname: 'cv.pdf',
+      buffer: Buffer.from('%PDF-1.4 rest'),
+    } as Express.Multer.File;
+    expect(assertValidPdfUpload(file)?.originalname).toBe('cv.pdf');
+  });
+
+  it('rejects non-PDF magic and oversized', () => {
+    expect(() =>
+      assertValidPdfUpload({
+        mimetype: 'application/pdf',
+        size: 10,
+        originalname: 'x.pdf',
+        buffer: Buffer.from('notpdf'),
+      } as Express.Multer.File)
+    ).toThrow(/Invalid PDF/);
+
+    expect(() =>
+      assertValidPdfUpload({
+        mimetype: 'application/pdf',
+        size: 50 * 1024 * 1024,
+        originalname: 'x.pdf',
+        buffer: Buffer.from('%PDF-1.4'),
+      } as Express.Multer.File)
+    ).toThrow(/exceeds maximum size/i);
+  });
+
+  it('returns 415 for wrong mime', () => {
+    try {
+      assertValidPdfUpload({
+        mimetype: 'image/png',
+        size: 10,
+        originalname: 'x.png',
+        buffer: Buffer.from('%PDF-1.4'),
+      } as Express.Multer.File);
+      expect.unreachable('should throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(AppError);
+      expect((e as AppError).statusCode).toBe(415);
+    }
+  });
+});
+
+describe('application id + email', () => {
+  it('derives stable 8-char application id from uuid', () => {
+    const id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+    expect(applicationIdFromUuid(id)).toBe('A1B2C3D4');
+  });
+
+  it('normalizes email canonically', () => {
+    expect(normalizeEmail('  Foo.Bar@Example.COM ')).toBe('foo.bar@example.com');
+  });
+});
+
+describe('AppError request contract helpers', () => {
+  it('carries optional details for 409 payloads', () => {
+    const err = new AppError(409, 'dup', undefined, { existing: { id: 'x' } });
+    expect(err.details).toEqual({ existing: { id: 'x' } });
   });
 });

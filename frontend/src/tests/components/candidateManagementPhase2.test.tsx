@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OwnerAssignModal } from '../../components/admin/OwnerAssignModal';
+import { validateResumePdf } from '../../utils/resume-validation';
 
 vi.mock('../../api/admin', () => ({
   getCandidateOwners: vi.fn().mockResolvedValue([
@@ -40,5 +41,12 @@ describe('OwnerAssignModal', () => {
     fireEvent.change(select, { target: { value: 'a1' } });
     fireEvent.click(screen.getByRole('button', { name: /Confirm/i }));
     await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('a1'));
+  });
+});
+
+describe('PDF validation helper', () => {
+  it('requires pdf extension', () => {
+    const result = validateResumePdf(new File(['%PDF'], 'resume.doc', { type: 'application/pdf' }));
+    expect(result.ok).toBe(false);
   });
 });

@@ -266,7 +266,7 @@ export class AdminService {
 
       return {
         id: c.id,
-        applicationId: c.id.slice(0, 8).toUpperCase(),
+        applicationId: (c.applicationId || c.id.slice(0, 8)).toUpperCase(),
         fullName: c.fullName,
         email: c.user.email,
         phone: c.fullPhone || c.phone,
@@ -387,7 +387,7 @@ export class AdminService {
 
     return {
       ...candidate,
-      applicationId: candidate.id.slice(0, 8).toUpperCase(),
+      applicationId: (candidate.applicationId || candidate.id.slice(0, 8)).toUpperCase(),
       phone: candidate.fullPhone || candidate.phone,
       countryCode: candidate.phoneCountryIso,
       countryName: countryDisplayName(candidate.phoneCountryIso, candidate.phoneCountry),

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, Download, ClipboardList, Copy, Phone } from 'lucide-react';
+import { Search, Download, ClipboardList, Copy, Phone, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ResumePreviewModal } from '../../components/admin/ResumePreviewModal';
 import { BulkActionToolbar } from '../../components/admin/BulkActionToolbar';
@@ -481,16 +481,26 @@ export function CandidatesPage() {
             </p>
           )}
         </div>
-        {canExport && (
-          <button
-            type="button"
-            onClick={() => openAction('export')}
-            className="btn-secondary flex items-center justify-center gap-2 text-sm w-full sm:w-auto"
-            disabled={busy}
-          >
-            <Download size={16} /> Export
-          </button>
-        )}
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          {canExport && (
+            <button
+              type="button"
+              onClick={() => openAction('export')}
+              className="btn-secondary flex items-center justify-center gap-2 text-sm w-full sm:w-auto"
+              disabled={busy}
+            >
+              <Download size={16} /> Export
+            </button>
+          )}
+          {canManage && (
+            <Link
+              to="/admin/candidates/new"
+              className="btn-primary flex items-center justify-center gap-2 text-sm w-full sm:w-auto"
+            >
+              <UserPlus size={16} /> Add Candidate
+            </Link>
+          )}
+        </div>
       </div>
 
       {selectionClearedNotice && (

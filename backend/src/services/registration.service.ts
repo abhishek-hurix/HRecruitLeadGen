@@ -1,9 +1,15 @@
 import bcrypt from 'bcryptjs';
 import pdfParse from 'pdf-parse';
-import { AuthProvider, ExperienceCategory } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import {
+  AuthProvider,
+  CandidateActivityType,
+  CandidateCreationSource,
+  ExperienceCategory,
+} from '@prisma/client';
 import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
 import { prisma } from '../config/database';
-import { storage } from './storage/storage.service';
+import { storage, storagePathOf } from './storage/storage.service';
 import { assessmentTokenService } from './assessment-token.service';
 import { emailVerificationService } from './email-verification.service';
 import { candidateStatusService } from './candidate-status.service';
@@ -11,6 +17,7 @@ import { visitorService } from './visitor.service';
 import { AppError, isValidEmail, isValidLinkedInUrl } from '../utils/errors';
 import { parseAndValidatePhone } from '../utils/phone';
 import { getExperienceYears, parseExperienceCategory } from '../utils/experience';
+import { applicationIdFromUuid, normalizeEmail } from '../utils/application-id';
 import { logger } from '../utils/logger';
 import { supabaseAuthService } from './supabase-auth.service';
 
@@ -152,11 +159,13 @@ export class RegistrationService {
       throw new AppError(400, 'Password must be at least 8 characters');
     }
 
-    const email = data.email.toLowerCase();
+    const email = normalizeEmail(data.email);
     const appliedRole = data.appliedRole?.trim() || DEFAULT_APPLIED_ROLE;
 
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [{ email }, { normalizedEmail: email }],
+      },
       include: { candidateProfiles: true },
     });
     if (existingUser?.candidateProfiles.some((profile) => profile.appliedRole.toLowerCase() === appliedRole.toLowerCase())) {
@@ -172,7 +181,8 @@ export class RegistrationService {
       }
     }
 
-    const resumePath = await storage.save(resumeFile, 'resumes');
+    const resumeSaved = await storage.save(resumeFile, 'resumes');
+    const resumePath = storagePathOf(resumeSaved);
     let candidateId: string | null = null;
     let createdSupabaseUserId: string | null = null;
     let createdLocalUser = false;
@@ -200,24 +210,44 @@ export class RegistrationService {
         createdSupabaseUserId = existingSupabaseUser ? null : supabaseUserId;
       }
 
+      const profileId = randomUUID();
+      const now = new Date();
       const candidateProfileData = {
+        id: profileId,
+        applicationId: applicationIdFromUuid(profileId),
         fullName: data.fullName.trim(),
         phone: parsedPhone.phoneNumber,
         countryCode: parsedPhone.countryCode,
         phoneNumber: parsedPhone.phoneNumber,
         fullPhone: parsedPhone.fullPhone,
         phoneCountry: parsedPhone.phoneCountry,
+        phoneCountryIso: parsedPhone.iso,
         experienceCategory,
         yearsOfExperience: getExperienceYears(experienceCategory),
         linkedinUrl: data.linkedinUrl.trim(),
         resumePath,
         appliedRole,
         referralCode: data.referralCode || null,
+        creationSource: CandidateCreationSource.SELF_REGISTERED,
+        lastActivityAt: now,
+        lastActivityType: CandidateActivityType.REGISTERED,
         resumes: {
           create: {
             fileName: resumeFile.originalname || `${data.fullName.trim().replace(/\s+/g, '_')}_resume.pdf`,
             filePath: resumePath,
+            storagePath: resumePath,
+            mimeType: resumeFile.mimetype || 'application/pdf',
+            sizeBytes: resumeFile.size || null,
+            uploadedAt: now,
             isPrimary: true,
+          },
+        },
+        activities: {
+          create: {
+            id: randomUUID(),
+            type: CandidateActivityType.REGISTERED,
+            occurredAt: now,
+            metadata: { source: 'self_registration' },
           },
         },
       };
@@ -229,6 +259,7 @@ export class RegistrationService {
               passwordHash: existingUser.passwordHash || passwordHash,
               supabaseUserId,
               authProvider: existingUser.authProvider,
+              normalizedEmail: email,
               candidateProfiles: {
                 create: candidateProfileData,
               },
@@ -238,6 +269,7 @@ export class RegistrationService {
         : await prisma.user.create({
             data: {
               email,
+              normalizedEmail: email,
               passwordHash,
               supabaseUserId: createdSupabaseUserId,
               authProvider: AuthProvider.LOCAL,

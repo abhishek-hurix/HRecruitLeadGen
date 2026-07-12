@@ -131,6 +131,29 @@ export async function getCandidateActivity(candidateId: string) {
   return data.data as import('../types/candidate-management').CandidateActivityTimeline;
 }
 
+export async function globalAdminSearch(q: string) {
+  const { data } = await api.get('/admin/search', { params: { q } });
+  return data.data as import('../types/candidate-management').GlobalSearchResult;
+}
+
+export async function checkCandidateDuplicate(email: string) {
+  const { data } = await api.get('/admin/candidates/duplicate-check', { params: { email } });
+  return data.data as import('../types/candidate-management').DuplicateCheckResult;
+}
+
+export async function createManualCandidate(
+  form: FormData,
+  idempotencyKey: string
+) {
+  const { data } = await api.post('/admin/candidates', form, {
+    headers: {
+      'Idempotency-Key': idempotencyKey,
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return data as import('../types/candidate-management').ManualCreateResult;
+}
+
 export async function bulkChangeStatus(selection: SelectionPayload, newStatus: string) {
   const { data } = await api.post('/admin/candidates/bulk/status', { selection, newStatus });
   return data as BulkResult;

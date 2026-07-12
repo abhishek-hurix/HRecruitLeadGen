@@ -115,6 +115,11 @@ enum AnswerMode {
   MCQ
 }
 
+enum CandidateCreationSource {
+  SELF_REGISTERED
+  ADMIN_CREATED
+}
+
 enum CandidateActivityType {
   REGISTERED
   ASSESSMENT_SUBMITTED
@@ -162,25 +167,30 @@ model Visitor {
 }
 
 model User {
-  id             String       @id @default(uuid())
-  email          String       @unique
-  passwordHash   String?      @map("password_hash")
-  supabaseUserId String?      @unique @map("supabase_user_id")
-  googleId       String?      @unique @map("google_id")
-  authProvider   AuthProvider @default(LOCAL) @map("auth_provider")
-  lastLoginAt    DateTime?    @map("last_login_at")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
+  id              String       @id @default(uuid())
+  email           String       @unique
+  /// Trimmed lowercase copy of email for duplicate checks / search. Kept in sync on write.
+  normalizedEmail String?      @unique @map("normalized_email")
+  passwordHash    String?      @map("password_hash")
+  supabaseUserId  String?      @unique @map("supabase_user_id")
+  googleId        String?      @unique @map("google_id")
+  authProvider    AuthProvider @default(LOCAL) @map("auth_provider")
+  lastLoginAt     DateTime?    @map("last_login_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
 
   candidateProfiles CandidateProfile[]
 
   @@index([googleId])
   @@index([supabaseUserId])
+  @@index([normalizedEmail])
   @@map("users")
 }
 
 model CandidateProfile {
   id                              String                    @id @default(uuid())
+  /// Persisted human Application ID (8 hex chars). Unique. Generated server-side on create.
+  applicationId                   String?                   @unique @map("application_id") @db.Char(8)
   userId                          String                    @map("user_id")
   fullName                        String                    @map("full_name")
   phone                           String
@@ -198,6 +208,16 @@ model CandidateProfile {
   resumePath                      String                    @map("resume_path")
   appliedRole                     String                    @default("General") @map("applied_role")
   referralCode                    String?                   @map("referral_code")
+  /// Optional admin-created profile enrichment (manual add candidate).
+  currentCompany                  String?                   @map("current_company")
+  currentDesignation              String?                   @map("current_designation")
+  noticePeriod                    String?                   @map("notice_period")
+  expectedSalaryAmount            Decimal?                  @map("expected_salary_amount") @db.Decimal(14, 2)
+  expectedSalaryCurrency          String?                   @map("expected_salary_currency") @db.VarChar(3)
+  sourceType                      String?                   @map("source_type")
+  sourceDetail                    String?                   @map("source_detail")
+  creationSource                  CandidateCreationSource   @default(SELF_REGISTERED) @map("creation_source")
+  createdByAdminId                String?                   @map("created_by_admin_id")
   emailVerified                   Boolean                   @default(false) @map("email_verified")
   emailVerifiedAt                 DateTime?                 @map("email_verified_at")
   verificationSentAt              DateTime?                 @map("verification_sent_at")
@@ -251,6 +271,7 @@ model CandidateProfile {
   rejectedByAdmin         AdminUser?                      @relation("CandidateRejectedBy", fields: [rejectedByAdminId], references: [id], onDelete: SetNull)
   ownerAdmin              AdminUser?                      @relation("CandidateOwner", fields: [ownerAdminId], references: [id], onDelete: SetNull)
   ownerAssignedBy         AdminUser?                      @relation("CandidateOwnerAssignedBy", fields: [ownerAssignedByAdminId], references: [id], onDelete: SetNull)
+  createdByAdmin          AdminUser?                      @relation("CandidateCreatedByAdmin", fields: [createdByAdminId], references: [id], onDelete: SetNull)
   assessmentTokens        AssessmentToken[]
   emailVerificationTokens EmailVerificationToken[]
   assessments             Assessment[]
@@ -280,6 +301,8 @@ model CandidateProfile {
   @@index([selectedRoleName])
   @@index([ownerAdminId, deletedAt])
   @@index([lastActivityAt, deletedAt])
+  @@index([creationSource])
+  @@index([createdByAdminId])
   @@map("candidate_profiles")
 }
 
@@ -328,18 +351,28 @@ model CandidateRejection {
 }
 
 model CandidateResume {
-  id          String   @id @default(uuid())
-  candidateId String   @map("candidate_id")
-  fileName    String   @map("file_name")
-  filePath    String   @map("file_path")
-  isPrimary   Boolean  @default(false) @map("is_primary")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                String    @id @default(uuid())
+  candidateId       String    @map("candidate_id")
+  fileName          String    @map("file_name")
+  filePath          String    @map("file_path")
+  /// Private storage bucket name (local or Supabase). Null = legacy local path only.
+  storageBucket     String?   @map("storage_bucket")
+  /// Object key within the bucket. Prefer this over embedding secrets in filePath.
+  storagePath       String?   @map("storage_path")
+  mimeType          String?   @map("mime_type")
+  sizeBytes         Int?      @map("size_bytes")
+  uploadedByAdminId String?   @map("uploaded_by_admin_id")
+  uploadedAt        DateTime? @map("uploaded_at")
+  isPrimary         Boolean   @default(false) @map("is_primary")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  candidate CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  candidate       CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  uploadedByAdmin AdminUser?       @relation("ResumeUploadedByAdmin", fields: [uploadedByAdminId], references: [id], onDelete: SetNull)
 
   @@index([candidateId])
   @@index([candidateId, isPrimary])
+  @@index([uploadedByAdminId])
   @@map("candidate_resumes")
 }
 
@@ -538,6 +571,8 @@ model AdminUser {
   rejectedCandidates       CandidateProfile[]      @relation("CandidateRejectedBy")
   ownedCandidates          CandidateProfile[]      @relation("CandidateOwner")
   ownerAssignmentsMade     CandidateProfile[]      @relation("CandidateOwnerAssignedBy")
+  candidatesCreated        CandidateProfile[]      @relation("CandidateCreatedByAdmin")
+  resumesUploaded          CandidateResume[]       @relation("ResumeUploadedByAdmin")
   candidateActivities      CandidateActivity[]     @relation("CandidateActivityActor")
   rejectionHistory         CandidateRejection[]    @relation("CandidateRejectionBy")
   bulkOperations           AdminBulkOperation[]

@@ -228,7 +228,108 @@ export type ApiErrorWithRequestId = {
   message?: string;
   code?: string;
   requestId?: string;
+  existing?: DuplicateCheckResult['existing'];
   errors?: string[];
+};
+
+export type GlobalSearchCandidateHit = {
+  type: 'candidate';
+  id: string;
+  applicationId: string;
+  fullName: string;
+  email: string;
+  countryCode?: string | null;
+  countryName?: string | null;
+  assessmentStatus?: string;
+  assignedRole?: string | null;
+  score?: number | null;
+  registeredAt?: string;
+};
+
+export type GlobalSearchJobRoleHit = {
+  type: 'jobRole';
+  id: string;
+  name: string;
+  country?: string;
+  status?: string;
+  openPositions?: number;
+};
+
+export type GlobalSearchAssessmentHit = {
+  type: 'assessment';
+  submissionId: string;
+  assessmentId: string;
+  assessmentName?: string | null;
+  jobRoleId?: string | null;
+  score?: number;
+  submittedAt?: string;
+  candidateId: string;
+  applicationId: string;
+  candidateName: string;
+  email: string;
+};
+
+export type GlobalSearchResult = {
+  query: string;
+  limits: { perGroup: number; minLength: number; maxLength: number };
+  candidates: GlobalSearchCandidateHit[];
+  jobRoles: GlobalSearchJobRoleHit[];
+  assessments: GlobalSearchAssessmentHit[];
+};
+
+export type AddCandidateFormValues = {
+  fullName: string;
+  email: string;
+  phoneCountryIso: string;
+  phoneNumber: string;
+  experienceCategory: string;
+  jobRoleId: string;
+  linkedinUrl: string;
+  currentCompany: string;
+  currentDesignation: string;
+  skills: string[];
+  noticePeriod: string;
+  expectedSalaryAmount: string;
+  expectedSalaryCurrency: string;
+  sourceType: string;
+  sourceDetail: string;
+};
+
+export type ResumeMetadata = {
+  fileName: string;
+  sizeBytes: number;
+  mimeType: string;
+};
+
+export type DuplicateCheckResult = {
+  duplicate: boolean;
+  existing: {
+    id: string;
+    applicationId: string;
+    fullName: string;
+    email: string;
+    assessmentStatus?: string;
+    assignedRole?: string | null;
+    registeredAt?: string;
+  } | null;
+};
+
+export type ManualCreateResult = {
+  success: boolean;
+  candidateCreated: boolean;
+  invitationSent: boolean;
+  invitationError?: string | null;
+  candidate: {
+    id: string;
+    applicationId: string;
+    fullName: string;
+    email: string;
+    countryCode?: string;
+    countryName?: string;
+    assignedRole?: string;
+    jobRoleId?: string;
+  };
+  dataModelNote?: string;
 };
 
 export function filtersToBackendSnapshot(filters: CandidateListFilters): Record<string, unknown> {

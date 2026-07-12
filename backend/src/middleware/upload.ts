@@ -6,7 +6,7 @@ const storage = multer.memoryStorage();
 
 const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
   if (file.mimetype !== 'application/pdf') {
-    return cb(new AppError(400, 'Only PDF files are allowed'));
+    return cb(new AppError(415, 'Only PDF files are allowed'));
   }
   cb(null, true);
 };
