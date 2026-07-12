@@ -310,7 +310,7 @@ export class AnalyticsService {
   }
 
   async exportCandidatesAttributionCSV(filters: AnalyticsFilters = {}) {
-    const hygieneWhere: Prisma.CandidateProfileWhereInput = {};
+    const hygieneWhere: Prisma.CandidateProfileWhereInput = { deletedAt: null };
     if (!filters.includeTest || !filters.includeInternal) {
       hygieneWhere.visitor = {
         ...(!filters.includeTest ? { isTest: false } : {}),

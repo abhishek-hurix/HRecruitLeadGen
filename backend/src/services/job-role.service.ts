@@ -174,7 +174,7 @@ export class JobRoleService {
     updatedAt: Date;
   }) {
     const candidates = await prisma.candidateProfile.findMany({
-      where: { selectedRoleId: role.id },
+      where: { selectedRoleId: role.id, deletedAt: null },
       include: { submissions: true, assessments: true },
     });
 
@@ -290,7 +290,9 @@ export class JobRoleService {
   }
 
   async deleteRole(id: string, adminId: string) {
-    const applicants = await prisma.candidateProfile.count({ where: { selectedRoleId: id } });
+    const applicants = await prisma.candidateProfile.count({
+      where: { selectedRoleId: id, deletedAt: null },
+    });
     if (applicants > 0) {
       throw new AppError(400, 'Cannot delete a role with candidate applications. Archive it instead.');
     }

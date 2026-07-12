@@ -34,19 +34,24 @@ export async function getDashboard(req: AuthRequest, res: Response, next: NextFu
 
 export async function getCandidates(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { search, status, experience, country, role, minScore, page, limit } = req.query;
+    const { search, status, experience, country, role, jobRoleId, minScore, page, limit, pageSize } = req.query;
     const parsedMinScore = minScore !== undefined && minScore !== ''
       ? Number(minScore)
       : undefined;
+    const parsedPageSize = pageSize
+      ? parseInt(pageSize as string, 10)
+      : limit
+        ? parseInt(limit as string, 10)
+        : 25;
     const result = await adminService.getCandidates({
       search: search as string,
       status: status as string,
       experience: experience as string,
       country: country as string,
-      role: role as string,
+      role: (jobRoleId as string) || (role as string),
       minScore: Number.isFinite(parsedMinScore) ? parsedMinScore : undefined,
-      page: page ? parseInt(page as string) : 1,
-      limit: limit ? parseInt(limit as string) : 20,
+      page: page ? parseInt(page as string, 10) : 1,
+      pageSize: parsedPageSize,
     });
     res.json(result);
   } catch (error) {
@@ -56,7 +61,10 @@ export async function getCandidates(req: AuthRequest, res: Response, next: NextF
 
 export async function getCandidateById(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const candidate = await adminService.getCandidateById(String(req.params.id));
+    const candidate = await adminService.getCandidateById(
+      String(req.params.id),
+      req.adminRole as AdminRole
+    );
     res.json(candidate);
   } catch (error) {
     next(error);

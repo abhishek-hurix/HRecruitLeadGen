@@ -38,7 +38,15 @@ export type JourneyStatus =
   | 'VERIFIED'
   | 'STARTED'
   | 'SUBMITTED'
-  | 'EXPIRED';
+  | 'EXPIRED'
+  | 'REJECTED';
+
+export type SelectionStatus =
+  | 'PENDING'
+  | 'SHORTLISTED'
+  | 'INTERVIEWED'
+  | 'SELECTED'
+  | 'REJECTED';
 
 export interface Candidate {
   id: string;
@@ -59,6 +67,12 @@ export interface Candidate {
   experienceCategory?: string | null;
   experienceLabel?: string | null;
   score: number | null;
+  scoreLabel?: string | null;
+  roleLabel?: string | null;
+  selectionStatus?: SelectionStatus;
+  rejectionReason?: string | null;
+  rejectedAt?: string | null;
+  deletedAt?: string | null;
   submittedAt: string | null;
   createdAt: string;
 }

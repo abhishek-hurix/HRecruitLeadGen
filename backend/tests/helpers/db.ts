@@ -26,6 +26,15 @@ export async function resetTestData() {
   await prisma.submission.deleteMany();
   await prisma.assessment.deleteMany();
   await prisma.assessmentToken.deleteMany();
+  await prisma.candidateInterviewParticipant.deleteMany().catch(() => undefined);
+  await prisma.candidateInterview.deleteMany().catch(() => undefined);
+  await prisma.emailReminderDelivery.deleteMany().catch(() => undefined);
+  await prisma.emailReminderTemplate.deleteMany().catch(() => undefined);
+  await prisma.adminBulkOperationItem.deleteMany().catch(() => undefined);
+  await prisma.adminBulkOperation.deleteMany().catch(() => undefined);
+  await prisma.candidateRejection.deleteMany().catch(() => undefined);
+  await prisma.adminGoogleCalendar.deleteMany().catch(() => undefined);
+  await prisma.idempotencyRecord.deleteMany().catch(() => undefined);
   await prisma.visitor.deleteMany();
   await prisma.user.deleteMany();
 }

@@ -12,7 +12,8 @@ export type JourneyStatus =
   | 'VERIFIED'
   | 'STARTED'
   | 'SUBMITTED'
-  | 'EXPIRED';
+  | 'EXPIRED'
+  | 'REJECTED';
 
 export class AssessmentTokenService {
   async createToken(candidateId: string, email: string) {
@@ -98,7 +99,9 @@ export class AssessmentTokenService {
     tokenExpiresAt?: Date | null;
     hasSubmission: boolean;
     assessmentInProgress: boolean;
+    selectionStatus?: string | null;
   }): JourneyStatus {
+    if (params.selectionStatus === 'REJECTED') return 'REJECTED';
     if (params.hasSubmission) return 'SUBMITTED';
     if (params.assessmentInProgress) return 'STARTED';
     if (params.tokenExpiresAt && params.tokenExpiresAt < new Date() && !params.hasSubmission) {

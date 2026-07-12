@@ -7,6 +7,10 @@ export const Permission = {
   VIEW_ASSESSMENTS: 'view_assessments',
   CALL_CANDIDATE: 'call_candidate',
   EXPORT_CANDIDATES: 'export_candidates',
+  MANAGE_CANDIDATES: 'manage_candidates',
+  VIEW_DELETED_CANDIDATES: 'view_deleted_candidates',
+  PERMANENTLY_DELETE_CANDIDATES: 'permanently_delete_candidates',
+  VIEW_REJECTION_REASONS: 'view_rejection_reasons',
   MANAGE_QUESTIONS: 'manage_questions',
   MANAGE_JOB_ROLES: 'manage_job_roles',
   VIEW_JOB_ROLES: 'view_job_roles',
@@ -26,6 +30,8 @@ const ADMIN_PERMISSIONS: PermissionKey[] = [
   Permission.VIEW_ASSESSMENTS,
   Permission.CALL_CANDIDATE,
   Permission.VIEW_JOB_ROLES,
+  Permission.EXPORT_CANDIDATES,
+  Permission.MANAGE_CANDIDATES,
 ];
 
 export function getPermissionsForRole(role: AdminRole): PermissionKey[] {

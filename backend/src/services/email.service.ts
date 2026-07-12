@@ -234,6 +234,65 @@ export class EmailService {
       throw error;
     }
   }
+
+  async sendCustomEmail(params: { to: string; subject: string; html: string; text?: string }): Promise<void> {
+    if (config.email.mockMode) {
+      logger.info('EMAIL_MOCK_MODE: custom email (not sent)', {
+        to: params.to,
+        subject: params.subject,
+      });
+      return;
+    }
+
+    const transporter = this.getTransporter();
+    try {
+      await transporter.sendMail({
+        from: config.email.from,
+        to: params.to,
+        subject: params.subject,
+        html: params.html,
+        text: params.text || params.html.replace(/<[^>]+>/g, ' '),
+      });
+      logger.info('Custom email sent', { to: params.to, subject: params.subject });
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string; response?: string };
+      logger.error('Failed to send custom email', {
+        to: params.to,
+        code: err.code,
+        message: err.message,
+        response: err.response,
+      });
+      throw error;
+    }
+  }
+
+  async sendInterviewInvite(params: {
+    to: string;
+    candidateName: string;
+    title: string;
+    startLocal: string;
+    endLocal: string;
+    timezone: string;
+    meetUrl?: string | null;
+    notes?: string | null;
+  }): Promise<void> {
+    const meetLine = params.meetUrl
+      ? `<p><a href="${params.meetUrl}">Join Google Meet</a></p>`
+      : '';
+    const html = `
+      <p>Hello <strong>${params.candidateName}</strong>,</p>
+      <p>You have been invited to an interview: <strong>${params.title}</strong>.</p>
+      <p>When: ${params.startLocal} – ${params.endLocal} (${params.timezone})</p>
+      ${meetLine}
+      ${params.notes ? `<p>Notes: ${params.notes}</p>` : ''}
+      <p>Regards,<br/>Hurix Digital</p>
+    `;
+    await this.sendCustomEmail({
+      to: params.to,
+      subject: `Interview Scheduled: ${params.title}`,
+      html,
+    });
+  }
 }
 
 export const emailService = new EmailService();

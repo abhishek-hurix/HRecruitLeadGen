@@ -36,6 +36,22 @@ import {
   setJobRoleStatus,
   generateJobRoleQuestions,
 } from '../controllers/admin.controller';
+import {
+  bulkChangeStatus,
+  bulkReject,
+  bulkAssignRole,
+  bulkSoftDelete,
+  bulkSendReminders,
+  listReminderTemplates,
+  previewReminder,
+  exportCandidates,
+  listDeletedCandidates,
+  getDeletedCandidate,
+  restoreCandidate,
+  permanentDeleteCandidate,
+  scheduleInterview,
+  getCalendarStatus,
+} from '../controllers/candidate-management.controller';
 import analyticsRoutes from './analytics.routes';
 
 const router = Router();
@@ -44,6 +60,22 @@ const loginLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
   message: { success: false, message: 'Too many login attempts.' },
+});
+
+const bulkActionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many bulk operations. Please wait and try again.' },
+});
+
+const exportLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many export requests. Please wait and try again.' },
 });
 
 const loginSchema = z.object({
@@ -98,6 +130,30 @@ router.get('/me', getMe);
 router.get('/dashboard', requirePermission(Permission.VIEW_DASHBOARD), getDashboard);
 router.get('/candidates', requirePermission(Permission.VIEW_CANDIDATES), getCandidates);
 router.get('/candidates/export', requirePermission(Permission.EXPORT_CANDIDATES), exportCSV);
+router.post('/candidates/export', exportLimiter, requirePermission(Permission.EXPORT_CANDIDATES), exportCandidates);
+router.post('/candidates/bulk/status', bulkActionLimiter, requirePermission(Permission.MANAGE_CANDIDATES), bulkChangeStatus);
+router.post('/candidates/bulk/reminders', bulkActionLimiter, requirePermission(Permission.MANAGE_CANDIDATES), bulkSendReminders);
+router.post('/candidates/bulk/assign-role', bulkActionLimiter, requirePermission(Permission.MANAGE_CANDIDATES), bulkAssignRole);
+router.post('/candidates/bulk/reject', bulkActionLimiter, requirePermission(Permission.MANAGE_CANDIDATES), bulkReject);
+router.post('/candidates/bulk/delete', bulkActionLimiter, requirePermission(Permission.MANAGE_CANDIDATES), bulkSoftDelete);
+router.post('/candidates/bulk/schedule-interview', bulkActionLimiter, requirePermission(Permission.MANAGE_CANDIDATES), scheduleInterview);
+router.get('/reminder-templates', requirePermission(Permission.MANAGE_CANDIDATES), listReminderTemplates);
+router.post('/reminder-templates/preview', requirePermission(Permission.MANAGE_CANDIDATES), previewReminder);
+router.get('/calendar/status', requirePermission(Permission.MANAGE_CANDIDATES), getCalendarStatus);
+
+router.get('/deleted-candidates', requirePermission(Permission.VIEW_DELETED_CANDIDATES), listDeletedCandidates);
+router.get(
+  '/deleted-candidates/:candidateId',
+  requirePermission(Permission.VIEW_DELETED_CANDIDATES),
+  getDeletedCandidate
+);
+router.post('/deleted-candidates/:candidateId/restore', requirePermission(Permission.VIEW_DELETED_CANDIDATES), restoreCandidate);
+router.delete(
+  '/deleted-candidates/:candidateId/permanent',
+  requirePermission(Permission.PERMANENTLY_DELETE_CANDIDATES),
+  permanentDeleteCandidate
+);
+
 router.get('/candidates/:id', requirePermission(Permission.VIEW_CANDIDATES), getCandidateById);
 router.get('/candidates/:id/resume', requirePermission(Permission.VIEW_RESUMES), downloadResume);
 router.get('/candidates/:id/resumes/:resumeId', requirePermission(Permission.VIEW_RESUMES), downloadCandidateResume);

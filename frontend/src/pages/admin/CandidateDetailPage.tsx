@@ -5,6 +5,7 @@ import { ArrowLeft, Copy, Download, FileText, Phone } from 'lucide-react';
 import { ResumePreviewModal } from '../../components/admin/ResumePreviewModal';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { getCandidateById, getCandidateResumePreviewUrl, getResumePreviewUrl, getSubmissionMarkdown } from '../../api/admin';
+import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { formatDate } from '../../utils/validation';
 import { formatSourceLabel } from '../../utils/utm';
 
@@ -17,6 +18,8 @@ export function CandidateDetailPage() {
   const [markdownPreview, setMarkdownPreview] = useState<{ content: string; filename: string } | null>(null);
   const [isOpeningMarkdown, setIsOpeningMarkdown] = useState(false);
   const [phoneCopied, setPhoneCopied] = useState(false);
+  const { hasPermission } = useAdminAuth();
+  const canViewRejection = hasPermission('view_rejection_reasons');
   const { data, isLoading } = useQuery({
     queryKey: ['candidate', id],
     queryFn: () => getCandidateById(id!),
@@ -109,6 +112,37 @@ export function CandidateDetailPage() {
       <Link to="/admin/candidates" className="mb-3 flex items-center gap-2 text-xs text-hurix-blue hover:underline">
         <ArrowLeft size={14} /> Back to Candidates
       </Link>
+
+      {data.deletedAt && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+          <p className="font-semibold">This candidate has been soft-deleted</p>
+          <p className="mt-1 text-red-700">
+            Deleted on {formatDate(data.deletedAt)}.
+            {hasPermission('view_deleted_candidates') && (
+              <>
+                {' '}
+                <Link to="/admin/deleted-candidates" className="underline font-medium">
+                  View deleted candidates
+                </Link>
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
+      {(data.selectionStatus === 'REJECTED' || data.journeyStatus === 'REJECTED') && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
+          <p className="font-semibold">Candidate rejected</p>
+          {data.rejectedAt && (
+            <p className="mt-1 text-amber-800">Rejected on {formatDate(data.rejectedAt)}</p>
+          )}
+          {canViewRejection && data.rejectionReason && (
+            <p className="mt-2 text-amber-900">
+              <span className="font-medium">Internal reason:</span> {data.rejectionReason}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <h1 className="text-xl font-bold text-hurix-charcoal">{data.fullName}</h1>

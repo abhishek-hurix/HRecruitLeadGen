@@ -1,6 +1,25 @@
 import { api, setAdminToken, clearAdminToken } from './client';
 import type { Candidate, DashboardMetrics } from '../types';
 import type { AdminSession } from '../contexts/AdminAuthContext';
+import type {
+  BulkResult,
+  ExportFormat,
+  ExportScope,
+  ReminderTemplate,
+  SelectionPayload,
+  DeletedCandidateRow,
+  PaginationMeta,
+} from '../types/candidate-management';
+
+export type {
+  SelectionPayload,
+  BulkResult,
+  ReminderTemplate,
+  ExportScope,
+  ExportFormat,
+  DeletedCandidateRow,
+  PaginationMeta,
+};
 
 export async function adminLogin(email: string, password: string) {
   const { data } = await api.post('/admin/login', { email, password });
@@ -35,13 +54,117 @@ export async function getCandidates(params: {
   minScore?: number;
   page?: number;
   limit?: number;
+  pageSize?: number;
 }) {
-  const { data } = await api.get('/admin/candidates', { params });
+  const { data } = await api.get('/admin/candidates', {
+    params: {
+      ...params,
+      pageSize: params.pageSize || params.limit,
+      limit: params.pageSize || params.limit,
+    },
+  });
   return data as {
     data: Candidate[];
     roleFilters: string[];
-    pagination: { page: number; limit: number; total: number; totalPages: number };
+    pagination: {
+      page: number;
+      limit: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+      hasNextPage: boolean;
+      hasPreviousPage: boolean;
+    };
+    meta: {
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+      hasNextPage: boolean;
+      hasPreviousPage: boolean;
+    };
   };
+}
+
+export async function bulkChangeStatus(selection: SelectionPayload, newStatus: string) {
+  const { data } = await api.post('/admin/candidates/bulk/status', { selection, newStatus });
+  return data as BulkResult;
+}
+
+export async function bulkReject(selection: SelectionPayload, reason: string) {
+  const { data } = await api.post('/admin/candidates/bulk/reject', { selection, reason });
+  return data as BulkResult;
+}
+
+export async function bulkAssignRole(selection: SelectionPayload, jobRoleId: string) {
+  const { data } = await api.post('/admin/candidates/bulk/assign-role', { selection, jobRoleId });
+  return data as BulkResult;
+}
+
+export async function bulkSoftDelete(selection: SelectionPayload) {
+  const { data } = await api.post('/admin/candidates/bulk/delete', { selection });
+  return data as BulkResult;
+}
+
+export async function bulkSendReminders(selection: SelectionPayload, templateId: string, operationId?: string) {
+  const { data } = await api.post('/admin/candidates/bulk/reminders', { selection, templateId, operationId });
+  return data as BulkResult;
+}
+
+export async function scheduleInterview(payload: Record<string, unknown>) {
+  const { data } = await api.post('/admin/candidates/bulk/schedule-interview', payload);
+  return data as BulkResult;
+}
+
+export async function getReminderTemplates() {
+  const { data } = await api.get('/admin/reminder-templates');
+  return data.data as ReminderTemplate[];
+}
+
+export async function previewReminderTemplate(templateId: string) {
+  const { data } = await api.post('/admin/reminder-templates/preview', { templateId });
+  return data.data as { subject: string; bodyHtml: string };
+}
+
+export async function getCalendarStatus() {
+  const { data } = await api.get('/admin/calendar/status');
+  return data.data as { connected: boolean; googleEmail: string | null; mockMode: boolean };
+}
+
+export async function exportCandidatesAdvanced(payload: {
+  scope: ExportScope;
+  format: ExportFormat;
+  selection?: SelectionPayload;
+  filters?: Record<string, unknown>;
+}) {
+  const { data } = await api.post('/admin/candidates/export', payload, { responseType: 'blob' });
+  const ext = payload.format;
+  const date = new Date().toISOString().slice(0, 10);
+  const url = window.URL.createObjectURL(new Blob([data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `candidates-${payload.scope.toLowerCase()}-${date}.${ext}`;
+  link.click();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function getDeletedCandidates(params: { search?: string; page?: number; pageSize?: number }) {
+  const { data } = await api.get('/admin/deleted-candidates', { params });
+  return data as {
+    success: boolean;
+    data: DeletedCandidateRow[];
+    meta: PaginationMeta;
+  };
+}
+
+export async function restoreDeletedCandidate(candidateId: string) {
+  const { data } = await api.post(`/admin/deleted-candidates/${candidateId}/restore`);
+  return data;
+}
+
+export async function permanentlyDeleteCandidate(candidateId: string) {
+  const { data } = await api.delete(`/admin/deleted-candidates/${candidateId}/permanent`);
+  return data;
 }
 
 export async function getCandidateById(id: string) {

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, FileQuestion, LogOut, UserCog, Menu, X, BarChart3, Briefcase } from 'lucide-react';
+import { LayoutDashboard, Users, FileQuestion, LogOut, UserCog, Menu, X, BarChart3, Briefcase, Trash2 } from 'lucide-react';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 
 const allNavItems = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'view_dashboard' },
   { path: '/admin/candidates', label: 'Candidates', icon: Users, permission: 'view_candidates' },
+  { path: '/admin/deleted-candidates', label: 'Deleted Candidates', icon: Trash2, permission: 'view_deleted_candidates' },
   { path: '/admin/job-roles', label: 'Job Roles', icon: Briefcase, permission: 'view_job_roles' },
   { path: '/admin/questions', label: 'Questions', icon: FileQuestion, permission: 'manage_questions' },
   { path: '/admin/analytics', label: 'Marketing Analytics', icon: BarChart3, superAdminOnly: true },
