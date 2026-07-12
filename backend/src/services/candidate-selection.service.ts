@@ -2,20 +2,56 @@ import { ExperienceCategory, Prisma, SelectionStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { AppError } from '../utils/errors';
 import { activeCandidateWhere, mergeCandidateWhere } from '../utils/candidate-scope';
+import { parseCountryCodesParam } from '../utils/country';
+import {
+  istInclusiveRangeToUtc,
+  resolveDatePreset,
+  getIstYmd,
+  istStartOfDayUtc,
+  type DatePreset,
+} from '../utils/ist-dates';
 
 export type CandidateSelectionMode = 'IDS' | 'ALL_MATCHING';
+
+export type RoleAssignmentFilter = 'all' | 'assigned' | 'unassigned' | string;
+
+export type CandidateSortBy =
+  | 'name'
+  | 'score'
+  | 'registeredAt'
+  | 'experience'
+  | 'country'
+  | 'assessmentStatus'
+  | 'assignedRole'
+  | 'lastActivity';
+
+export type CandidateSortOrder = 'asc' | 'desc';
 
 export interface CandidateFilterSnapshot {
   search?: string;
   journeyStatus?: string | null;
   experience?: string | null;
-  /** Free-text country (phoneCountry display name), matching existing HP. */
+  /** Legacy single free-text country (phoneCountry display name). Prefer countryCodes. */
   country?: string | null;
+  /** ISO alpha-2 codes, multi-select. */
+  countryCodes?: string[] | null;
   score?: number | null;
   minScore?: number | null;
   jobRoleId?: string | null;
   role?: string | null;
+  /** all | assigned | unassigned | specific job role UUID */
+  roleAssignment?: RoleAssignmentFilter | null;
+  registeredFrom?: string | null;
+  registeredTo?: string | null;
+  datePreset?: DatePreset | null;
+  ownerId?: string | null;
+  /** unassigned | specific admin id */
+  ownerFilter?: 'all' | 'unassigned' | string | null;
+  /** 7 | 30 | 90 — lastActivityAt <= IST cutoff */
+  inactivityDays?: number | null;
   status?: string | null;
+  sortBy?: CandidateSortBy | null;
+  sortOrder?: CandidateSortOrder | null;
 }
 
 export interface CandidateSelectionInput {
@@ -29,17 +65,61 @@ const DEFAULT_MAX_IDS = Number(process.env.BULK_OPERATION_MAX_CANDIDATES || 5000
 const CHUNK_SIZE = 500;
 
 export function normalizeFilterSnapshot(filters: CandidateFilterSnapshot = {}): CandidateFilterSnapshot {
+  const countryCodes = parseCountryCodesParam(filters.countryCodes);
   return {
     search: filters.search?.trim() || undefined,
     journeyStatus: filters.journeyStatus ?? filters.status ?? null,
     status: filters.status ?? filters.journeyStatus ?? null,
     experience: filters.experience || null,
     country: filters.country?.trim() || null,
+    countryCodes: countryCodes.length ? countryCodes : null,
     score: filters.score ?? null,
     minScore: filters.minScore ?? filters.score ?? null,
     jobRoleId: filters.jobRoleId || filters.role || null,
     role: filters.role || filters.jobRoleId || null,
+    roleAssignment: filters.roleAssignment || null,
+    registeredFrom: filters.registeredFrom || null,
+    registeredTo: filters.registeredTo || null,
+    datePreset: filters.datePreset || null,
+    ownerId: filters.ownerId || null,
+    ownerFilter: filters.ownerFilter || filters.ownerId || null,
+    inactivityDays: filters.inactivityDays ?? null,
+    sortBy: filters.sortBy || null,
+    sortOrder: filters.sortOrder || null,
   };
+}
+
+function applyRegisteredDateFilter(
+  parts: Prisma.CandidateProfileWhereInput[],
+  filters: CandidateFilterSnapshot
+) {
+  let fromYmd = filters.registeredFrom || undefined;
+  let toYmd = filters.registeredTo || undefined;
+
+  if (filters.datePreset && filters.datePreset !== 'custom') {
+    const resolved = resolveDatePreset(filters.datePreset);
+    if (resolved) {
+      fromYmd = resolved.fromYmd;
+      toYmd = resolved.toYmd;
+    }
+  }
+
+  if (!fromYmd && !toYmd) return;
+
+  if (fromYmd && !toYmd) toYmd = fromYmd;
+  if (!fromYmd && toYmd) fromYmd = toYmd;
+
+  try {
+    const { fromUtc, toExclusiveUtc } = istInclusiveRangeToUtc(fromYmd!, toYmd!);
+    parts.push({
+      createdAt: {
+        gte: fromUtc,
+        lt: toExclusiveUtc,
+      },
+    });
+  } catch (e) {
+    throw new AppError(400, e instanceof Error ? e.message : 'Invalid registered date range');
+  }
 }
 
 export function buildCandidateListWhere(
@@ -69,19 +149,34 @@ export function buildCandidateListWhere(
     parts.push({ experienceCategory: filters.experience as ExperienceCategory });
   }
 
-  if (filters.country?.trim()) {
+  const countryCodes = filters.countryCodes?.length
+    ? filters.countryCodes.map((c) => c.toUpperCase())
+    : parseCountryCodesParam(filters.countryCodes);
+  if (countryCodes.length > 0) {
+    parts.push({ phoneCountryIso: { in: countryCodes } });
+  } else if (filters.country?.trim()) {
     parts.push({ phoneCountry: { equals: filters.country.trim(), mode: 'insensitive' } });
   }
 
-  const roleId = filters.jobRoleId || filters.role;
-  if (roleId && roleId !== 'all') {
-    parts.push({
-      OR: [
-        { selectedRoleId: roleId },
-        { assessments: { some: { jobRoleId: roleId } } },
-        { submissions: { some: { assessment: { jobRoleId: roleId } } } },
-      ],
-    });
+  const roleAssignment = filters.roleAssignment;
+  if (roleAssignment === 'assigned') {
+    parts.push({ selectedRoleId: { not: null } });
+  } else if (roleAssignment === 'unassigned') {
+    parts.push({ selectedRoleId: null });
+  } else {
+    const roleId =
+      filters.jobRoleId ||
+      filters.role ||
+      (roleAssignment && roleAssignment !== 'all' ? roleAssignment : null);
+    if (roleId && roleId !== 'all') {
+      parts.push({
+        OR: [
+          { selectedRoleId: roleId },
+          { assessments: { some: { jobRoleId: roleId } } },
+          { submissions: { some: { assessment: { jobRoleId: roleId } } } },
+        ],
+      });
+    }
   }
 
   const minScore = filters.minScore ?? filters.score;
@@ -99,12 +194,74 @@ export function buildCandidateListWhere(
       parts.push({ assessmentStatus });
     } else if (status === 'REJECTED') {
       parts.push({ selectionStatus: SelectionStatus.REJECTED });
-    } else if (['REGISTERED', 'EMAIL_SENT', 'VERIFIED', 'STARTED', 'SUBMITTED', 'EXPIRED'].includes(status)) {
+    } else if (
+      ['REGISTERED', 'EMAIL_SENT', 'VERIFIED', 'STARTED', 'SUBMITTED', 'EXPIRED'].includes(status)
+    ) {
       parts.push({ candidateStatus: status as Prisma.EnumCandidateStatusFilter['equals'] });
     }
   }
 
+  applyRegisteredDateFilter(parts, filters);
+
+  const ownerFilter = filters.ownerFilter || filters.ownerId;
+  if (ownerFilter === 'unassigned') {
+    parts.push({ ownerAdminId: null });
+  } else if (ownerFilter && ownerFilter !== 'all') {
+    parts.push({ ownerAdminId: ownerFilter });
+  }
+
+  if (filters.inactivityDays && [7, 30, 90].includes(filters.inactivityDays)) {
+    const { y, m, d } = getIstYmd();
+    const cutoffDay = new Date(Date.UTC(y, m, d - filters.inactivityDays));
+    const cutoff = istStartOfDayUtc(
+      cutoffDay.getUTCFullYear(),
+      cutoffDay.getUTCMonth(),
+      cutoffDay.getUTCDate()
+    );
+    parts.push({
+      OR: [
+        { lastActivityAt: { lte: cutoff } },
+        { lastActivityAt: null, createdAt: { lte: cutoff } },
+      ],
+    });
+  }
+
   return mergeCandidateWhere(...parts);
+}
+
+export function buildCandidateListOrderBy(
+  sortBy?: CandidateSortBy | null,
+  sortOrder?: CandidateSortOrder | null
+): Prisma.CandidateProfileOrderByWithRelationInput[] {
+  const dir: Prisma.SortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
+  const nulls: Prisma.NullsOrder = 'last';
+
+  if (!sortBy || !sortOrder) {
+    return [{ createdAt: 'desc' }, { id: 'desc' }];
+  }
+
+  const secondary: Prisma.CandidateProfileOrderByWithRelationInput = { id: 'desc' };
+
+  switch (sortBy) {
+    case 'name':
+      return [{ fullName: dir }, secondary];
+    case 'score':
+      return [{ latestScore: { sort: dir, nulls } }, secondary];
+    case 'registeredAt':
+      return [{ createdAt: dir }, secondary];
+    case 'experience':
+      return [{ yearsOfExperience: { sort: dir, nulls } }, secondary];
+    case 'country':
+      return [{ phoneCountryIso: { sort: dir, nulls } }, { phoneCountry: dir }, secondary];
+    case 'assessmentStatus':
+      return [{ assessmentStatus: dir }, secondary];
+    case 'assignedRole':
+      return [{ selectedRoleName: { sort: dir, nulls } }, secondary];
+    case 'lastActivity':
+      return [{ lastActivityAt: { sort: dir, nulls } }, secondary];
+    default:
+      throw new AppError(400, 'Invalid sortBy');
+  }
 }
 
 /**

@@ -1,10 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Copy, Download, FileText, Phone } from 'lucide-react';
 import { ResumePreviewModal } from '../../components/admin/ResumePreviewModal';
+import { ActivityTimeline } from '../../components/admin/ActivityTimeline';
+import { OwnerAssignModal } from '../../components/admin/OwnerAssignModal';
 import { AdminLayout } from '../../components/layout/AdminLayout';
-import { getCandidateById, getCandidateResumePreviewUrl, getResumePreviewUrl, getSubmissionMarkdown } from '../../api/admin';
+import {
+  assignCandidateOwner,
+  getCandidateById,
+  getCandidateOwners,
+  getCandidateResumePreviewUrl,
+  getResumePreviewUrl,
+  getSubmissionMarkdown,
+} from '../../api/admin';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { formatDate } from '../../utils/validation';
 import { formatSourceLabel } from '../../utils/utm';
@@ -17,14 +26,25 @@ export function CandidateDetailPage() {
   const [showAllResumes, setShowAllResumes] = useState(false);
   const [markdownPreview, setMarkdownPreview] = useState<{ content: string; filename: string } | null>(null);
   const [isOpeningMarkdown, setIsOpeningMarkdown] = useState(false);
+  const [showOwnerModal, setShowOwnerModal] = useState(false);
   const [phoneCopied, setPhoneCopied] = useState(false);
-  const { hasPermission } = useAdminAuth();
+  const queryClient = useQueryClient();
+  const { hasPermission, isSuperAdmin } = useAdminAuth();
   const canViewRejection = hasPermission('view_rejection_reasons');
   const { data, isLoading } = useQuery({
     queryKey: ['candidate', id],
     queryFn: () => getCandidateById(id!),
     enabled: !!id,
   });
+  const { data: owners = [] } = useQuery({
+    queryKey: ['candidate-owners'],
+    queryFn: getCandidateOwners,
+    enabled: !!id,
+  });
+  const resolvedOwner =
+    data?.ownerAdmin ||
+    data?.owner ||
+    (data?.ownerAdminId ? owners.find((o) => o.id === data.ownerAdminId) || null : null);
   const submission = data?.submissions?.[0];
   const detailView = searchParams.get('view') === 'assessment' ? 'assessment' : 'profile';
 
@@ -176,12 +196,27 @@ export function CandidateDetailPage() {
               </a>
             </span>
           </div>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Country</span><span>{data.phoneCountry || '—'}</span></div>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Country Code</span><span>{data.countryCode || '—'}</span></div>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Country</span><span>{data.countryName || data.phoneCountry || '—'}</span></div>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Country Code</span><span>{data.phoneCountryIso || data.countryCode || '—'}</span></div>
           <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Years of Experience</span><span>{data.yearsOfExperience ?? '—'}</span></div>
           <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Experience Category</span><span>{data.experienceLabel || '—'}</span></div>
           <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">LinkedIn</span><a href={data.linkedinUrl} target="_blank" rel="noreferrer" className="text-hurix-blue text-right break-all">{data.linkedinUrl}</a></div>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Role</span><span className="text-right">{data.appliedRole || '-'}</span></div>
+          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Role</span><span className="text-right">{data.appliedRole || 'Not Assigned'}</span></div>
+          <div className="flex justify-between gap-4 text-xs items-start">
+            <span className="text-hurix-gray shrink-0">Owner</span>
+            <span className="text-right">
+              {resolvedOwner?.email || 'Not Assigned'}
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  className="ml-2 text-hurix-blue underline text-[11px]"
+                  onClick={() => setShowOwnerModal(true)}
+                >
+                  {resolvedOwner || data.ownerAdminId ? 'Reassign' : 'Assign'}
+                </button>
+              )}
+            </span>
+          </div>
           <div className="flex justify-between text-xs"><span className="text-hurix-gray">Referral</span><span>{data.referralCode || '-'}</span></div>
           <div className="flex justify-between text-xs"><span className="text-hurix-gray">Email Verified</span>{verificationBadge(Boolean(data.emailVerified))}</div>
           <div className="flex justify-between text-xs"><span className="text-hurix-gray">Journey Status</span><span className="font-medium">{data.journeyStatus?.replace(/_/g, ' ') || '-'}</span></div>
@@ -216,6 +251,8 @@ export function CandidateDetailPage() {
           <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Referrer</span><span className="text-right break-all text-[11px]">{data.attributionReferrer || '-'}</span></div>
           <div className="flex justify-between text-xs"><span className="text-hurix-gray">Device</span><span>{data.attributionDevice || '-'}</span></div>
           </div>
+
+          {id && <ActivityTimeline candidateId={id} />}
         </>
         )}
 
@@ -372,6 +409,22 @@ export function CandidateDetailPage() {
             </pre>
           </div>
         </div>
+      )}
+      {showOwnerModal && data && id && (
+        <OwnerAssignModal
+          candidateName={data.fullName}
+          currentOwner={
+            resolvedOwner
+              ? { id: resolvedOwner.id, email: resolvedOwner.email, role: resolvedOwner.role }
+              : null
+          }
+          onClose={() => setShowOwnerModal(false)}
+          onConfirm={async (ownerAdminId) => {
+            await assignCandidateOwner(id, ownerAdminId);
+            await queryClient.invalidateQueries({ queryKey: ['candidate', id] });
+            await queryClient.invalidateQueries({ queryKey: ['candidates'] });
+          }}
+        />
       )}
     </AdminLayout>
   );

@@ -57,11 +57,16 @@ const listFixture = {
       email: 'alice@example.com',
       phone: '+919876543210',
       phoneCountry: 'India',
+      countryName: 'India',
       experienceLabel: '2-3 Years',
       appliedRole: 'Engineer',
+      roleLabel: 'Not Assigned',
+      owner: null,
       journeyStatus: 'VERIFIED',
       assessmentStatus: 'NOT_STARTED',
       score: null,
+      scoreLabel: 'No Assessment',
+      lastActivityAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     },
     {
@@ -71,11 +76,16 @@ const listFixture = {
       email: 'bob@example.com',
       phone: '+919876543211',
       phoneCountry: 'India',
+      countryName: 'India',
       experienceLabel: '2-3 Years',
       appliedRole: 'Engineer',
+      roleLabel: 'Engineer',
+      owner: { id: 'admin-1', email: 'admin@hurixdigital.com', role: 'SUPER_ADMIN' },
       journeyStatus: 'REGISTERED',
-      assessmentStatus: 'NOT_STARTED',
-      score: null,
+      assessmentStatus: 'SUBMITTED',
+      score: 7,
+      scoreLabel: '7/10',
+      lastActivityAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     },
   ],
@@ -405,5 +415,233 @@ test.describe('Candidate Management UI', () => {
     await seedAdminSession(page, normalAdmin);
     await page.goto('/admin/deleted-candidates');
     await expect(page).toHaveURL(/access-denied/);
+  });
+});
+
+test.describe('Candidate Management phase 2', () => {
+  test.beforeEach(async ({ page }) => {
+    await seedAdminSession(page, superAdmin);
+
+    await page.route('**/api/admin/countries**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: [
+            { code: 'IN', name: 'India' },
+            { code: 'US', name: 'United States' },
+          ],
+        }),
+      });
+    });
+
+    await page.route('**/api/admin/candidate-owners**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: [{ id: 'admin-1', email: 'admin@hurixdigital.com', role: 'SUPER_ADMIN' }],
+        }),
+      });
+    });
+
+    await page.route('**/api/admin/candidates/*/score-breakdown**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            candidateId: '22222222-2222-2222-2222-222222222222',
+            applicationId: '22222222',
+            fullName: 'Bob AdminTest',
+            email: 'bob@example.com',
+            hasSubmission: true,
+            aggregateOnly: true,
+            score: 7,
+            maximumScore: 10,
+            correctCount: 7,
+            incorrectCount: 2,
+            unansweredCount: 1,
+            assessmentStatus: 'SUBMITTED',
+          },
+        }),
+      });
+    });
+
+    await page.route('**/api/admin/candidates/*/activity**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            candidateId: '11111111-1111-1111-1111-111111111111',
+            applicationId: '11111111',
+            lastActivityAt: new Date().toISOString(),
+            lastActivityType: 'OWNER_ASSIGNED',
+            events: [
+              {
+                type: 'REGISTERED',
+                at: new Date().toISOString(),
+                summary: 'Candidate registered',
+              },
+              {
+                type: 'OWNER_ASSIGNED',
+                at: new Date().toISOString(),
+                summary: 'Owner assigned',
+                adminEmail: 'admin@hurixdigital.com',
+              },
+            ],
+          },
+        }),
+      });
+    });
+
+    await page.route('**/api/admin/candidates/*/owner', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            candidateId: '11111111-1111-1111-1111-111111111111',
+            owner: { id: 'admin-1', email: 'admin@hurixdigital.com', role: 'SUPER_ADMIN' },
+          },
+        }),
+      });
+    });
+
+    await page.route('**/api/admin/candidates/11111111-1111-1111-1111-111111111111', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: '11111111-1111-1111-1111-111111111111',
+          applicationId: '11111111',
+          fullName: 'Alice AdminTest',
+          user: { email: 'alice@example.com' },
+          email: 'alice@example.com',
+          phone: '+919876543210',
+          fullPhone: '+919876543210',
+          phoneCountry: 'India',
+          phoneCountryIso: 'IN',
+          countryName: 'India',
+          yearsOfExperience: 2,
+          experienceLabel: '2-3 Years',
+          linkedinUrl: 'https://linkedin.com/in/alice',
+          appliedRole: null,
+          owner: null,
+          journeyStatus: 'VERIFIED',
+          assessmentStatus: 'NOT_STARTED',
+          emailVerified: true,
+          resumes: [],
+          submissions: [],
+        }),
+      });
+    });
+
+    await page.route('**/api/admin/job-roles**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: [{ id: 'role-1', title: 'Engineer', status: 'ACTIVE' }],
+        }),
+      });
+    });
+
+    await page.route('**/api/admin/candidates?**', async (route) => {
+      const enriched = {
+        ...listFixture,
+        data: listFixture.data.map((c, i) => ({
+          ...c,
+          score: i === 1 ? 7 : null,
+          scoreLabel: i === 1 ? '7/10' : 'No Assessment',
+          roleLabel: i === 0 ? 'Not Assigned' : 'Engineer',
+          owner: i === 0 ? null : { id: 'admin-1', email: 'admin@hurixdigital.com', role: 'SUPER_ADMIN' },
+          lastActivityAt: new Date().toISOString(),
+          countryName: 'India',
+        })),
+      };
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(enriched),
+      });
+    });
+  });
+
+  test('country multi-select and date filter are present', async ({ page }) => {
+    await page.goto('/admin/candidates');
+    await expect(page.getByRole('button', { name: /All countries/i })).toBeVisible();
+    await expect(page.getByLabel(/Registered date preset/i)).toBeVisible();
+    await expect(page.getByLabel(/Role assignment filter/i)).toBeVisible();
+    await expect(page.getByLabel(/Owner filter/i)).toBeVisible();
+    await expect(page.getByLabel(/Inactivity filter/i)).toBeVisible();
+  });
+
+  test('sortable headers and blank labels', async ({ page }) => {
+    await page.goto('/admin/candidates');
+    const table = page.locator('table');
+    await expect(page.getByRole('button', { name: /Sort by Name/i })).toBeVisible();
+    await expect(table.getByText('Not Assigned').first()).toBeVisible();
+    await expect(table.getByText('No Assessment').first()).toBeVisible();
+    await page.getByRole('button', { name: /Sort by Name/i }).click();
+  });
+
+  test('email copy and score drawer', async ({ page }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.goto('/admin/candidates');
+    await page.locator('table').getByLabel('Copy email address').first().click();
+    await expect(page.getByText('Email copied')).toBeVisible();
+    await page.locator('table').getByRole('button', { name: /7\/10|View score breakdown for Bob/i }).click();
+    await expect(page.getByRole('heading', { name: /Score breakdown/i })).toBeVisible();
+  });
+
+  test('owner assignment modal submits from list', async ({ page }) => {
+    await page.goto('/admin/candidates');
+    const ownerRequest = page.waitForRequest((request) =>
+      request.method() === 'PATCH' &&
+      request.url().includes('/api/admin/candidates/11111111-1111-1111-1111-111111111111/owner')
+    );
+
+    await page.locator('table').getByRole('button', { name: /Not Assigned/i }).first().click();
+    await expect(page.getByRole('heading', { name: /Assign Owner/i })).toBeVisible();
+    await page.getByLabel('Select owner admin').selectOption('admin-1');
+    await page.getByRole('button', { name: /^Confirm$/ }).click();
+    const request = await ownerRequest;
+    expect(request.postDataJSON()).toEqual({ ownerAdminId: 'admin-1' });
+    await expect(page.getByRole('heading', { name: /Assign Owner/i })).toHaveCount(0);
+  });
+
+  test('candidate detail shows owner and activity timeline', async ({ page }) => {
+    await page.goto('/admin/candidates/11111111-1111-1111-1111-111111111111');
+    await expect(page.getByText('Owner')).toBeVisible();
+    await expect(page.getByText('Not Assigned')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Activity Timeline/i })).toBeVisible();
+    await expect(page.getByText(/Candidate registered/i)).toBeVisible();
+    await expect(page.getByText(/Owner assigned/i)).toBeVisible();
+  });
+
+  test('empty state clear filters', async ({ page }) => {
+    await page.route('**/api/admin/candidates?**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...listFixture,
+          data: [],
+          meta: { ...listFixture.meta, total: 0, totalPages: 1, hasNextPage: false },
+          pagination: { ...listFixture.pagination, total: 0, totalPages: 1, hasNextPage: false },
+        }),
+      });
+    });
+    await page.goto('/admin/candidates');
+    await expect(page.locator('table').getByText(/No candidates match the current filters/i)).toBeVisible();
+    await page.locator('table').getByRole('button', { name: /Clear All Filters/i }).click();
   });
 });

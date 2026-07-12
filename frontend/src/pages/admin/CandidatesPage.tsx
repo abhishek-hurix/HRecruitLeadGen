@@ -5,6 +5,12 @@ import { Link } from 'react-router-dom';
 import { ResumePreviewModal } from '../../components/admin/ResumePreviewModal';
 import { BulkActionToolbar } from '../../components/admin/BulkActionToolbar';
 import { CandidateRowMenu } from '../../components/admin/CandidateRowMenu';
+import { CountryMultiSelect } from '../../components/admin/CountryMultiSelect';
+import { RegisteredDateFilter } from '../../components/admin/RegisteredDateFilter';
+import { SortableTh } from '../../components/admin/SortableTh';
+import { ScoreBreakdownDrawer } from '../../components/admin/ScoreBreakdownDrawer';
+import { OwnerAssignModal } from '../../components/admin/OwnerAssignModal';
+import { TruncatedText } from '../../components/ui/TruncatedText';
 import {
   AssignRoleModal,
   BulkResultBanner,
@@ -19,6 +25,9 @@ import {
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import {
   getCandidates,
+  getAdminCountries,
+  getCandidateOwners,
+  assignCandidateOwner,
   exportCandidatesAdvanced,
   getJobRoles,
   getResumePreviewUrl,
@@ -41,6 +50,10 @@ import {
   getPageRange,
   PAGE_SIZE_OPTIONS,
 } from '../../types/candidate-management';
+import { cycleSort, type DatePreset, type SortDirection } from '../../utils/candidate-list-ui';
+import { FALLBACK_COUNTRIES } from '../../utils/iso-countries';
+import { formatRelativeTime, formatIstDateTime, toIstTitle } from '../../utils/activity';
+import type { Candidate } from '../../types';
 
 type ModalKind =
   | null
@@ -55,7 +68,7 @@ type ModalKind =
 
 export function CandidatesPage() {
   const queryClient = useQueryClient();
-  const { hasPermission } = useAdminAuth();
+  const { hasPermission, isSuperAdmin } = useAdminAuth();
   const canManage = hasPermission('manage_candidates');
   const canExport = hasPermission('export_candidates');
 
@@ -63,17 +76,28 @@ export function CandidatesPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [experience, setExperience] = useState('');
-  const [country, setCountry] = useState('');
+  const [countryCodes, setCountryCodes] = useState<string[]>([]);
   const [minScore, setMinScore] = useState('');
   const [role, setRole] = useState('all');
+  const [roleAssignment, setRoleAssignment] = useState('all');
+  const [ownerId, setOwnerId] = useState('');
+  const [inactivityDays, setInactivityDays] = useState<'' | '7' | '30' | '90'>('');
+  const [datePreset, setDatePreset] = useState<DatePreset>('');
+  const [registeredFrom, setRegisteredFrom] = useState('');
+  const [registeredTo, setRegisteredTo] = useState('');
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortDirection>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(25);
   const [resumePreview, setResumePreview] = useState<{ url: string; filename: string } | null>(null);
   const [loadingResumeId, setLoadingResumeId] = useState<string | null>(null);
   const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
+  const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
   const [actionTarget, setActionTarget] = useState<'bulk' | string>('bulk');
+  const [ownerModalCandidate, setOwnerModalCandidate] = useState<Candidate | null>(null);
+  const [scoreCandidateId, setScoreCandidateId] = useState<string | null>(null);
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<'status' | 'reminder' | 'role' | 'reject' | 'interview' | 'export' | 'delete' | null>(null);
@@ -94,11 +118,35 @@ export function CandidatesPage() {
       search,
       status,
       experience,
-      country,
+      country: '',
+      countryCodes,
       minScore,
       role,
+      roleAssignment,
+      registeredFrom,
+      registeredTo,
+      datePreset,
+      ownerId,
+      inactivityDays,
+      sortBy: sortBy || '',
+      sortOrder: sortOrder || '',
     }),
-    [search, status, experience, country, minScore, role]
+    [
+      search,
+      status,
+      experience,
+      countryCodes,
+      minScore,
+      role,
+      roleAssignment,
+      registeredFrom,
+      registeredTo,
+      datePreset,
+      ownerId,
+      inactivityDays,
+      sortBy,
+      sortOrder,
+    ]
   );
 
   const { data: rolesData } = useQuery({
@@ -106,16 +154,58 @@ export function CandidatesPage() {
     queryFn: getJobRoles,
   });
 
+  const { data: countriesData } = useQuery({
+    queryKey: ['admin-countries'],
+    queryFn: getAdminCountries,
+    staleTime: 60 * 60 * 1000,
+  });
+  const countries = countriesData?.length ? countriesData : FALLBACK_COUNTRIES;
+
+  const { data: ownersData = [] } = useQuery({
+    queryKey: ['candidate-owners'],
+    queryFn: getCandidateOwners,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
-    queryKey: ['candidates', search, status, experience, country, minScore, role, page, pageSize],
+    queryKey: [
+      'candidates',
+      search,
+      status,
+      experience,
+      countryCodes,
+      minScore,
+      role,
+      roleAssignment,
+      registeredFrom,
+      registeredTo,
+      datePreset,
+      ownerId,
+      inactivityDays,
+      sortBy,
+      sortOrder,
+      page,
+      pageSize,
+    ],
     queryFn: () =>
       getCandidates({
         search,
         status,
         experience,
-        country: country || undefined,
+        countryCodes: countryCodes.length ? countryCodes : undefined,
         minScore: minScore ? Number(minScore) : undefined,
-        role: role === 'all' ? undefined : role,
+        role: role !== 'all' ? role : undefined,
+        roleAssignment:
+          roleAssignment === 'assigned' || roleAssignment === 'unassigned'
+            ? roleAssignment
+            : undefined,
+        registeredFrom: registeredFrom || undefined,
+        registeredTo: registeredTo || undefined,
+        datePreset: datePreset && datePreset !== 'custom' ? datePreset : undefined,
+        ownerId: ownerId || undefined,
+        inactivityDays: inactivityDays ? Number(inactivityDays) : undefined,
+        sortBy: sortBy || undefined,
+        sortOrder: sortOrder || undefined,
         page,
         pageSize,
       }),
@@ -260,6 +350,22 @@ export function CandidatesPage() {
     }
   };
 
+  const copyEmailAddress = async (email: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(email);
+      setCopiedEmail(email);
+      setCopyNotice('Email copied');
+      window.setTimeout(() => {
+        setCopiedEmail((current) => (current === email ? null : current));
+        setCopyNotice(null);
+      }, 1500);
+    } catch {
+      setCopyNotice('Could not copy to clipboard');
+      window.setTimeout(() => setCopyNotice(null), 2500);
+    }
+  };
+
   const phoneActions = (phone: string) => (
     <div className="inline-flex min-w-0 items-center gap-1">
       <span className="truncate">{phone}</span>
@@ -287,9 +393,24 @@ export function CandidatesPage() {
     setSearch('');
     setStatus('');
     setExperience('');
-    setCountry('');
+    setCountryCodes([]);
     setMinScore('');
     setRole('all');
+    setRoleAssignment('all');
+    setOwnerId('');
+    setInactivityDays('');
+    setDatePreset('');
+    setRegisteredFrom('');
+    setRegisteredTo('');
+    setSortBy(null);
+    setSortOrder(null);
+    setPage(1);
+  };
+
+  const handleSort = (column: string) => {
+    const next = cycleSort(sortBy, sortOrder, column);
+    setSortBy(next.sortBy);
+    setSortOrder(next.sortOrder);
     setPage(1);
   };
 
@@ -297,9 +418,18 @@ export function CandidatesPage() {
     search: search || undefined,
     status: status || null,
     experience: experience || null,
-    country: country || null,
+    country: null,
+    countryCodes: countryCodes.length ? countryCodes : null,
     minScore: minScore ? Number(minScore) : null,
     role: role !== 'all' ? role : null,
+    roleAssignment: roleAssignment !== 'all' ? roleAssignment : null,
+    registeredFrom: registeredFrom || null,
+    registeredTo: registeredTo || null,
+    datePreset: datePreset || null,
+    ownerId: ownerId || null,
+    inactivityDays: inactivityDays ? Number(inactivityDays) : null,
+    sortBy: sortBy || null,
+    sortOrder: sortOrder || null,
   };
 
   const runExport = async (scope: 'SELECTED' | 'FILTERED' | 'ALL_ACTIVE', format: 'csv' | 'xlsx') => {
@@ -411,7 +541,7 @@ export function CandidatesPage() {
       <div className="mb-4 flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => { setRole('all'); setPage(1); }}
+          onClick={() => { setRole('all'); setRoleAssignment('all'); setPage(1); }}
           className={`rounded-full px-4 py-2 text-sm font-medium ${role === 'all' ? 'bg-hurix-blue text-white' : 'bg-white text-hurix-gray border hover:text-hurix-blue'}`}
         >
           All
@@ -420,7 +550,7 @@ export function CandidatesPage() {
           <button
             key={filter.value}
             type="button"
-            onClick={() => { setRole(filter.value); setPage(1); }}
+            onClick={() => { setRole(filter.value); setRoleAssignment('all'); setPage(1); }}
             className={`rounded-full px-4 py-2 text-sm font-medium ${role === filter.value ? 'bg-hurix-blue text-white' : 'bg-white text-hurix-gray border hover:text-hurix-blue'}`}
           >
             {filter.label}
@@ -438,7 +568,7 @@ export function CandidatesPage() {
             onChange={(e) => setSearchInput(e.target.value)}
           />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-3">
           <select className="input-field" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
             <option value="">All Journey Status</option>
             <option value="REGISTERED">Registered</option>
@@ -458,11 +588,21 @@ export function CandidatesPage() {
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
-          <input
-            className="input-field"
-            placeholder="Filter by country..."
-            value={country}
-            onChange={(e) => { setCountry(e.target.value); setPage(1); }}
+          <CountryMultiSelect
+            countries={countries}
+            value={countryCodes}
+            onChange={(codes) => { setCountryCodes(codes); setPage(1); }}
+          />
+          <RegisteredDateFilter
+            preset={datePreset}
+            from={registeredFrom}
+            to={registeredTo}
+            onChange={({ preset, from, to }) => {
+              setDatePreset(preset);
+              setRegisteredFrom(from);
+              setRegisteredTo(to);
+              setPage(1);
+            }}
           />
           <select className="input-field" value={minScore} onChange={(e) => { setMinScore(e.target.value); setPage(1); }}>
             <option value="">All Scores</option>
@@ -472,13 +612,60 @@ export function CandidatesPage() {
           </select>
           <select
             className="input-field"
-            value={roleFilters.some((f) => f.value === role) ? role : ''}
-            onChange={(e) => { setRole(e.target.value || 'all'); setPage(1); }}
+            value={roleAssignment}
+            onChange={(e) => {
+              const v = e.target.value;
+              setRoleAssignment(v);
+              if (v === 'assigned' || v === 'unassigned' || v === 'all') setRole('all');
+              setPage(1);
+            }}
+            aria-label="Role assignment filter"
           >
-            <option value="">All Job Roles</option>
+            <option value="all">All Candidates</option>
+            <option value="assigned">Role Assigned</option>
+            <option value="unassigned">No Role Assigned</option>
+          </select>
+          <select
+            className="input-field"
+            value={roleFilters.some((f) => f.value === role) ? role : ''}
+            onChange={(e) => {
+              const v = e.target.value || 'all';
+              setRole(v);
+              if (v !== 'all') setRoleAssignment('all');
+              setPage(1);
+            }}
+            aria-label="Specific job role"
+          >
+            <option value="">Specific Job Role</option>
             {(rolesData?.data || []).map((r) => (
               <option key={r.id} value={r.id}>{r.title}</option>
             ))}
+          </select>
+          <select
+            className="input-field"
+            value={ownerId}
+            onChange={(e) => { setOwnerId(e.target.value); setPage(1); }}
+            aria-label="Owner filter"
+          >
+            <option value="">All Owners</option>
+            <option value="unassigned">Unassigned</option>
+            {ownersData.map((owner) => (
+              <option key={owner.id} value={owner.id}>{owner.email}</option>
+            ))}
+          </select>
+          <select
+            className="input-field"
+            value={inactivityDays}
+            onChange={(e) => {
+              setInactivityDays(e.target.value as '' | '7' | '30' | '90');
+              setPage(1);
+            }}
+            aria-label="Inactivity filter"
+          >
+            <option value="">Any activity</option>
+            <option value="7">No activity for 7 days</option>
+            <option value="30">No activity for 30 days</option>
+            <option value="90">No activity for 90 days</option>
           </select>
         </div>
         {isFetching && !isLoading && (
@@ -540,20 +727,44 @@ export function CandidatesPage() {
                   )}
                 </div>
               </div>
-              <p className="text-sm text-hurix-gray break-all">{c.email}</p>
+              <div className="text-sm text-hurix-gray flex items-center gap-2">
+                <span className="break-all">{c.email}</span>
+                <button
+                  type="button"
+                  onClick={(e) => copyEmailAddress(c.email, e)}
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-200"
+                  aria-label="Copy email"
+                  title={copiedEmail === c.email ? 'Copied' : 'Copy email address'}
+                >
+                  <Copy size={12} />
+                </button>
+              </div>
               <div className="text-sm text-hurix-gray">
                 {phoneActions(c.phone)}
-                <span className="ml-2">· {c.phoneCountry || '—'}</span>
+                <span className="ml-2">· {c.countryName || c.phoneCountry || '—'}</span>
               </div>
               {c.experienceLabel && <p className="text-sm text-hurix-charcoal">{c.experienceLabel}</p>}
-              {(c.roleLabel || c.appliedRole) && (
-                <p className="text-xs font-medium text-hurix-blue">{c.roleLabel || c.appliedRole}</p>
-              )}
-              <div className="flex flex-wrap gap-2 text-xs">
+              <p className="text-xs font-medium text-hurix-blue">{c.roleLabel || c.appliedRole || 'Not Assigned'}</p>
+              <p className="text-xs text-hurix-gray">Owner: {c.owner?.email || 'Unassigned'}</p>
+              <p
+                className="text-xs text-hurix-gray"
+                title={toIstTitle(c.lastActivityAt || c.createdAt) || formatIstDateTime(c.lastActivityAt || c.createdAt)}
+              >
+                Last activity: {formatRelativeTime(c.lastActivityAt || c.createdAt)}
+              </p>
+              <div className="flex flex-wrap gap-2 text-xs items-center">
                 {statusBadge(c.assessmentStatus)}
-                <span className="text-hurix-gray">
-                  {c.score !== null ? (c.scoreLabel || `${c.score}/10`) : (c.scoreLabel || 'No score')}
-                </span>
+                {c.score != null ? (
+                  <button
+                    type="button"
+                    className="text-hurix-blue font-medium"
+                    onClick={() => setScoreCandidateId(c.id)}
+                  >
+                    {c.scoreLabel || `${c.score}/10`}
+                  </button>
+                ) : (
+                  <span className="text-hurix-gray">{c.scoreLabel || 'No Assessment'}</span>
+                )}
               </div>
               <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-100">
                 <Link to={`/admin/candidates/${c.id}?view=profile`} className="text-hurix-blue text-sm font-medium">View</Link>
@@ -576,20 +787,22 @@ export function CandidatesPage() {
       {/* Desktop table */}
       <div className="hidden lg:block card-premium overflow-visible p-0">
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed text-xs min-w-[1100px]">
+          <table className="w-full table-fixed text-xs min-w-[1280px]">
             <colgroup>
               <col className="w-[3%]" />
-              <col className="w-[7%]" />
-              <col className="w-[9%]" />
-              <col className="w-[13%]" />
-              <col className="w-[11%]" />
-              <col className="w-[7%]" />
+              <col className="w-[6%]" />
               <col className="w-[8%]" />
               <col className="w-[11%]" />
+              <col className="w-[10%]" />
+              <col className="w-[6%]" />
+              <col className="w-[7%]" />
               <col className="w-[9%]" />
+              <col className="w-[7%]" />
               <col className="w-[5%]" />
+              <col className="w-[7%]" />
               <col className="w-[8%]" />
-              <col className="w-[9%]" />
+              <col className="w-[7%]" />
+              <col className="w-[5%]" />
             </colgroup>
             <thead className="bg-slate-50 border-b">
               <tr>
@@ -613,24 +826,26 @@ export function CandidatesPage() {
                   )}
                 </th>
                 <th className="px-2 py-3 text-left font-semibold">App ID</th>
-                <th className="px-2 py-3 text-left font-semibold">Name</th>
+                <SortableTh label="Name" column="name" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
                 <th className="px-2 py-3 text-left font-semibold">Email</th>
                 <th className="px-2 py-3 text-left font-semibold">Phone</th>
-                <th className="px-2 py-3 text-left font-semibold">Country</th>
-                <th className="px-2 py-3 text-left font-semibold">Experience</th>
-                <th className="px-2 py-3 text-left font-semibold">Role</th>
-                <th className="px-2 py-3 text-left font-semibold">Assessment</th>
-                <th className="px-2 py-3 text-left font-semibold">Score</th>
-                <th className="px-2 py-3 text-left font-semibold">Registered</th>
+                <SortableTh label="Country" column="country" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+                <SortableTh label="Experience" column="experience" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+                <SortableTh label="Role" column="assignedRole" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+                <SortableTh label="Assessment" column="assessmentStatus" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+                <SortableTh label="Score" column="score" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+                <SortableTh label="Registered" column="registeredAt" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+                <th className="px-2 py-3 text-left font-semibold">Owner</th>
+                <SortableTh label="Last Activity" column="lastActivity" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
                 <th className="px-2 py-3 text-left font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={12} className="p-8 text-center text-hurix-gray">Loading...</td></tr>
+                <tr><td colSpan={14} className="p-8 text-center text-hurix-gray">Loading...</td></tr>
               ) : data?.data.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="p-8 text-center text-hurix-gray">
+                  <td colSpan={14} className="p-8 text-center text-hurix-gray">
                     <p className="mb-3">No candidates match the current filters.</p>
                     <button type="button" className="btn-secondary text-sm" onClick={clearAllFilters}>
                       Clear All Filters
@@ -650,21 +865,75 @@ export function CandidatesPage() {
                         />
                       )}
                     </td>
-                    <td className="truncate px-2 py-2.5 font-mono">{c.applicationId || c.id.slice(0, 8).toUpperCase()}</td>
-                    <td className="truncate px-2 py-2.5 font-medium">{c.fullName}</td>
-                    <td className="truncate px-2 py-2.5 text-hurix-gray" title={c.email}>{c.email}</td>
+                    <td className="truncate px-2 py-2.5 font-mono">
+                      <TruncatedText text={c.applicationId || c.id.slice(0, 8).toUpperCase()} />
+                    </td>
+                    <td className="truncate px-2 py-2.5 font-medium">
+                      <TruncatedText text={c.fullName} />
+                    </td>
+                    <td className="truncate px-2 py-2.5 text-hurix-gray">
+                      <div className="inline-flex min-w-0 items-center gap-1 max-w-full">
+                        <TruncatedText text={c.email} className="min-w-0" />
+                        <button
+                          type="button"
+                          onClick={(e) => copyEmailAddress(c.email, e)}
+                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-200 text-hurix-charcoal hover:bg-slate-50"
+                          title={copiedEmail === c.email ? 'Copied' : 'Copy email address'}
+                          aria-label="Copy email address"
+                        >
+                          <Copy size={12} />
+                        </button>
+                      </div>
+                    </td>
                     <td className="truncate px-2 py-2.5 text-hurix-gray">{phoneActions(c.phone)}</td>
-                    <td className="truncate px-2 py-2.5 text-hurix-gray">{c.phoneCountry || '—'}</td>
-                    <td className="truncate px-2 py-2.5 text-hurix-gray">{c.experienceLabel || '—'}</td>
-                    <td className="truncate px-2 py-2.5 text-hurix-gray" title={c.roleLabel || c.appliedRole || undefined}>
-                      {c.roleLabel || c.appliedRole || '—'}
+                    <td className="truncate px-2 py-2.5 text-hurix-gray">
+                      <TruncatedText text={c.countryName || c.phoneCountry || '—'} />
+                    </td>
+                    <td className="truncate px-2 py-2.5 text-hurix-gray">
+                      <TruncatedText text={c.experienceLabel || '—'} />
+                    </td>
+                    <td className="truncate px-2 py-2.5 text-hurix-gray">
+                      <TruncatedText text={c.roleLabel || c.appliedRole || 'Not Assigned'} />
                     </td>
                     <td className="px-2 py-2.5">{statusBadge(c.assessmentStatus)}</td>
                     <td className="px-2 py-2.5">
-                      {c.score !== null ? (c.scoreLabel || `${c.score}/10`) : (c.scoreLabel || '—')}
+                      {c.score != null ? (
+                        <button
+                          type="button"
+                          className="text-hurix-blue hover:underline font-medium"
+                          onClick={() => setScoreCandidateId(c.id)}
+                          aria-label={`View score breakdown for ${c.fullName}`}
+                        >
+                          {c.scoreLabel || `${c.score}/10`}
+                        </button>
+                      ) : (
+                        <span className="text-hurix-gray">{c.scoreLabel || 'No Assessment'}</span>
+                      )}
                     </td>
-                    <td className="truncate px-2 py-2.5 text-hurix-gray">{formatDate(c.createdAt)}</td>
-                    <td className="px-2 py-2.5">
+                    <td className="truncate px-2 py-2.5 text-hurix-gray">
+                      <TruncatedText text={formatDate(c.createdAt)} />
+                    </td>
+                    <td className="truncate px-2 py-2.5 text-hurix-gray">
+                      {isSuperAdmin ? (
+                        <button
+                          type="button"
+                          className="text-left hover:text-hurix-blue truncate max-w-full"
+                          onClick={() => setOwnerModalCandidate(c)}
+                          title={c.owner?.email || 'Assign owner'}
+                        >
+                          <TruncatedText text={c.owner?.email || 'Unassigned'} />
+                        </button>
+                      ) : (
+                        <TruncatedText text={c.owner?.email || 'Unassigned'} />
+                      )}
+                    </td>
+                    <td
+                      className="truncate px-2 py-2.5 text-hurix-gray"
+                      title={formatIstDateTime(c.lastActivityAt || c.createdAt)}
+                    >
+                      <TruncatedText text={formatRelativeTime(c.lastActivityAt || c.createdAt)} />
+                    </td>
+                    <td className="px-2 py-2.5 relative">
                       <div className="flex items-center gap-1">
                         {canManage ? (
                           <CandidateRowMenu
@@ -859,6 +1128,25 @@ export function CandidatesPage() {
           onClose={() => setModal(null)}
           onConfirm={async (scope, format) => {
             await runExport(scope, format);
+          }}
+        />
+      )}
+
+      {scoreCandidateId && (
+        <ScoreBreakdownDrawer
+          candidateId={scoreCandidateId}
+          onClose={() => setScoreCandidateId(null)}
+        />
+      )}
+
+      {ownerModalCandidate && (
+        <OwnerAssignModal
+          candidateName={ownerModalCandidate.fullName}
+          currentOwner={ownerModalCandidate.owner || null}
+          onClose={() => setOwnerModalCandidate(null)}
+          onConfirm={async (nextOwnerId) => {
+            await assignCandidateOwner(ownerModalCandidate.id, nextOwnerId);
+            await queryClient.invalidateQueries({ queryKey: ['candidates'] });
           }}
         />
       )}

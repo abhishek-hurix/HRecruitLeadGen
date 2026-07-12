@@ -14,8 +14,17 @@ const baseFilters = {
   status: '',
   experience: '',
   country: '',
+  countryCodes: [] as string[],
   minScore: '',
   role: 'all',
+  roleAssignment: 'all',
+  registeredFrom: '',
+  registeredTo: '',
+  datePreset: '',
+  ownerId: '',
+  inactivityDays: '' as const,
+  sortBy: '',
+  sortOrder: '',
 };
 
 describe('useCandidateSelection', () => {

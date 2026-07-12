@@ -34,26 +34,91 @@ export async function getDashboard(req: AuthRequest, res: Response, next: NextFu
 
 export async function getCandidates(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { search, status, experience, country, role, jobRoleId, minScore, page, limit, pageSize } = req.query;
-    const parsedMinScore = minScore !== undefined && minScore !== ''
-      ? Number(minScore)
-      : undefined;
-    const parsedPageSize = pageSize
-      ? parseInt(pageSize as string, 10)
-      : limit
-        ? parseInt(limit as string, 10)
-        : 25;
+    const { parseCandidateListQuery } = await import('../utils/candidate-list-query');
+    const parsed = parseCandidateListQuery(req.query as Record<string, unknown>);
+
+    if (parsed.ownerId && parsed.ownerId !== 'unassigned' && parsed.ownerId !== 'all') {
+      const owner = await adminService.assertActiveAdminOwner(parsed.ownerId);
+      if (!owner) {
+        const { AppError } = await import('../utils/errors');
+        throw new AppError(400, 'Owner admin not found or inactive');
+      }
+    }
+
     const result = await adminService.getCandidates({
-      search: search as string,
-      status: status as string,
-      experience: experience as string,
-      country: country as string,
-      role: (jobRoleId as string) || (role as string),
-      minScore: Number.isFinite(parsedMinScore) ? parsedMinScore : undefined,
-      page: page ? parseInt(page as string, 10) : 1,
-      pageSize: parsedPageSize,
+      search: parsed.search || undefined,
+      status: parsed.status || undefined,
+      experience: parsed.experience || undefined,
+      country: parsed.country || undefined,
+      countryCodes: parsed.countryCodes,
+      role: parsed.role || undefined,
+      roleAssignment: parsed.roleAssignment,
+      registeredFrom: parsed.registeredFrom,
+      registeredTo: parsed.registeredTo,
+      datePreset: parsed.datePreset,
+      ownerId: parsed.ownerId,
+      inactivityDays: parsed.inactivityDays,
+      minScore: parsed.minScore ?? undefined,
+      sortBy: parsed.sortBy,
+      sortOrder: parsed.sortOrder,
+      page: parsed.page,
+      pageSize: parsed.pageSize,
     });
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCountriesList(_req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { listIsoCountries } = await import('../utils/country');
+    res.json({ success: true, data: listIsoCountries() });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getScoreBreakdown(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { getScoreBreakdown: load } = await import('../services/candidate-insight.service');
+    const data = await load(String(req.params.id));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCandidateActivity(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { getCandidateActivityTimeline } = await import('../services/candidate-insight.service');
+    const data = await getCandidateActivityTimeline(String(req.params.id));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function assignOwner(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { assignCandidateOwner } = await import('../services/candidate-insight.service');
+    const data = await assignCandidateOwner({
+      candidateId: String(req.params.id),
+      ownerAdminId: req.body.ownerAdminId ?? null,
+      actorAdminId: req.adminId!,
+      actorRole: req.adminRole!,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listOwners(_req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { listCandidateOwners } = await import('../services/candidate-insight.service');
+    const data = await listCandidateOwners();
+    res.json({ success: true, data });
   } catch (error) {
     next(error);
   }

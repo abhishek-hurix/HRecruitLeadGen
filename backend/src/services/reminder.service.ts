@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { BulkOperationAction, ReminderDeliveryStatus } from '@prisma/client';
+import { BulkOperationAction, CandidateActivityType, ReminderDeliveryStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { AppError } from '../utils/errors';
 import { escapeHtml, writeAuditLog } from '../utils/admin-safety';
@@ -194,6 +194,12 @@ export class ReminderService {
                 status: ReminderDeliveryStatus.SENT,
                 sentAt: new Date(),
               },
+            });
+            const { touchCandidateActivity } = await import('./candidate-insight.service');
+            await touchCandidateActivity(candidateId, CandidateActivityType.REMINDER_SENT, {
+              actorAdminId: adminUserId,
+              operationId,
+              metadata: { templateId },
             });
           } catch (e) {
             failed += 1;

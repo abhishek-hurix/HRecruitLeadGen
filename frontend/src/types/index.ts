@@ -63,9 +63,13 @@ export interface Candidate {
   appliedCountry?: string | null;
   appliedCompensation?: string | null;
   phoneCountry?: string | null;
+  phoneCountryIso?: string | null;
+  countryName?: string | null;
+  dialCode?: string | null;
   countryCode?: string | null;
   experienceCategory?: string | null;
   experienceLabel?: string | null;
+  yearsOfExperience?: number | null;
   score: number | null;
   scoreLabel?: string | null;
   roleLabel?: string | null;
@@ -75,6 +79,14 @@ export interface Candidate {
   deletedAt?: string | null;
   submittedAt: string | null;
   createdAt: string;
+  lastActivityAt?: string | null;
+  lastActivityType?: string | null;
+  ownerAdminId?: string | null;
+  owner?: {
+    id: string;
+    email: string;
+    role: string;
+  } | null;
 }
 
 export interface DashboardMetrics {

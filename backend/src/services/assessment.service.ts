@@ -386,11 +386,20 @@ export class AssessmentService {
         data: { status: AssessmentStatus.COMPLETED },
       });
 
+      await tx.candidateProfile.update({
+        where: { id: candidateId },
+        data: { latestScore: evaluation.score },
+      });
+
       return sub;
     });
 
     await assessmentTokenService.markSubmitted(candidateId);
     await candidateStatusService.markSubmitted(candidateId);
+
+    const { touchCandidateActivity } = await import('./candidate-insight.service');
+    const { CandidateActivityType } = await import('@prisma/client');
+    await touchCandidateActivity(candidateId, CandidateActivityType.ASSESSMENT_SUBMITTED);
 
     const candidate = await prisma.candidateProfile.findUnique({ where: { id: candidateId } });
 

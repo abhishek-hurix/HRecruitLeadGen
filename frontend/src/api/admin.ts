@@ -50,8 +50,17 @@ export async function getCandidates(params: {
   status?: string;
   experience?: string;
   country?: string;
+  countryCodes?: string[];
   role?: string;
+  roleAssignment?: string;
+  registeredFrom?: string;
+  registeredTo?: string;
+  datePreset?: string;
+  ownerId?: string;
+  inactivityDays?: number;
   minScore?: number;
+  sortBy?: string;
+  sortOrder?: string;
   page?: number;
   limit?: number;
   pageSize?: number;
@@ -59,6 +68,7 @@ export async function getCandidates(params: {
   const { data } = await api.get('/admin/candidates', {
     params: {
       ...params,
+      countryCodes: params.countryCodes?.length ? params.countryCodes.join(',') : undefined,
       pageSize: params.pageSize || params.limit,
       limit: params.pageSize || params.limit,
     },
@@ -82,8 +92,43 @@ export async function getCandidates(params: {
       totalPages: number;
       hasNextPage: boolean;
       hasPreviousPage: boolean;
+      sortBy?: string;
+      sortOrder?: string;
     };
   };
+}
+
+export async function getAdminCountries() {
+  const { data } = await api.get('/admin/countries');
+  return data.data as Array<{ code: string; name: string }>;
+}
+
+export async function getCandidateOwners() {
+  const { data } = await api.get('/admin/candidate-owners');
+  return data.data as Array<{ id: string; email: string; role: string }>;
+}
+
+export async function assignCandidateOwner(candidateId: string, ownerAdminId: string | null) {
+  const { data } = await api.patch(`/admin/candidates/${candidateId}/owner`, { ownerAdminId });
+  return data as {
+    success: boolean;
+    data: {
+      candidateId: string;
+      owner: { id: string; email: string; role: string } | null;
+      ownerAssignedAt?: string | null;
+      previousOwnerId?: string | null;
+    };
+  };
+}
+
+export async function getScoreBreakdown(candidateId: string) {
+  const { data } = await api.get(`/admin/candidates/${candidateId}/score-breakdown`);
+  return data.data as import('../types/candidate-management').ScoreBreakdown;
+}
+
+export async function getCandidateActivity(candidateId: string) {
+  const { data } = await api.get(`/admin/candidates/${candidateId}/activity`);
+  return data.data as import('../types/candidate-management').CandidateActivityTimeline;
 }
 
 export async function bulkChangeStatus(selection: SelectionPayload, newStatus: string) {

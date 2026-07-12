@@ -4,6 +4,7 @@ import {
   AssessmentStatus,
   BulkOperationAction,
   BulkOperationStatus,
+  CandidateActivityType,
   CandidateStatus,
   JobRoleStatus,
   Prisma,
@@ -181,6 +182,12 @@ export class CandidateBulkService {
           where: { id },
           data: { candidateStatus: newStatus as CandidateStatus },
         });
+        const { touchCandidateActivity } = await import('./candidate-insight.service');
+        await touchCandidateActivity(id, CandidateActivityType.STATUS_CHANGED, {
+          actorAdminId: adminUserId,
+          operationId,
+          metadata: { previous, newStatus },
+        });
         results.push({
           candidateId: id,
           status: 'succeeded',
@@ -323,6 +330,12 @@ export class CandidateBulkService {
             roleSelectedAt: new Date(),
             appliedRole: role.title,
           },
+        });
+        const { touchCandidateActivity } = await import('./candidate-insight.service');
+        await touchCandidateActivity(id, CandidateActivityType.ROLE_ASSIGNED, {
+          actorAdminId: adminUserId,
+          operationId,
+          metadata: { previousRole, jobRoleId: role.id, title: role.title },
         });
         results.push({
           candidateId: id,

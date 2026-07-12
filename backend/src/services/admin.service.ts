@@ -8,8 +8,9 @@ import { assessmentTokenService, JourneyStatus } from './assessment-token.servic
 import { aiAssessmentService } from './ai-assessment.service';
 import { getPermissionsForRole, hasPermission, Permission } from '../config/permissions';
 import { getExperienceLabel } from '../utils/experience';
+import { countryDisplayName } from '../utils/country';
 import { activeCandidateWhere, mergeCandidateWhere } from '../utils/candidate-scope';
-import { buildCandidateListWhere } from './candidate-selection.service';
+import { buildCandidateListOrderBy, buildCandidateListWhere } from './candidate-selection.service';
 
 export class AdminService {
   async login(email: string, password: string) {
@@ -132,13 +133,32 @@ export class AdminService {
     return base;
   }
 
+  async assertActiveAdminOwner(adminId: string) {
+    return prisma.adminUser.findFirst({
+      where: {
+        id: adminId,
+        role: { in: [AdminRole.ADMIN, AdminRole.SUPER_ADMIN] },
+      },
+      select: { id: true, email: true, role: true },
+    });
+  }
+
   async getCandidates(params: {
     search?: string;
     status?: string;
     experience?: string;
     country?: string;
+    countryCodes?: string[] | null;
     role?: string;
+    roleAssignment?: string | null;
+    registeredFrom?: string | null;
+    registeredTo?: string | null;
+    datePreset?: string | null;
+    ownerId?: string | null;
+    inactivityDays?: number | null;
     minScore?: number;
+    sortBy?: string | null;
+    sortOrder?: string | null;
     page?: number;
     limit?: number;
     pageSize?: number;
@@ -148,25 +168,44 @@ export class AdminService {
     const pageSize = [25, 50, 100].includes(rawSize) ? rawSize : 25;
     const skip = (page - 1) * pageSize;
 
-    const where = buildCandidateListWhere({
+    const filterSnapshot = {
       search: params.search,
       status: params.status,
       journeyStatus: params.status,
       experience: params.experience,
       country: params.country,
+      countryCodes: params.countryCodes || undefined,
       role: params.role,
       jobRoleId: params.role,
+      roleAssignment: params.roleAssignment,
+      registeredFrom: params.registeredFrom,
+      registeredTo: params.registeredTo,
+      datePreset: params.datePreset as import('./candidate-selection.service').CandidateFilterSnapshot['datePreset'],
+      ownerId: params.ownerId,
+      ownerFilter: params.ownerId,
+      inactivityDays: params.inactivityDays,
       minScore: params.minScore,
-    });
+      sortBy: params.sortBy as import('./candidate-selection.service').CandidateSortBy | undefined,
+      sortOrder: params.sortOrder as import('./candidate-selection.service').CandidateSortOrder | undefined,
+    };
+
+    const where = buildCandidateListWhere(filterSnapshot);
+    const orderBy = buildCandidateListOrderBy(
+      filterSnapshot.sortBy,
+      filterSnapshot.sortOrder === 'asc' || filterSnapshot.sortOrder === 'desc'
+        ? filterSnapshot.sortOrder
+        : null
+    );
 
     const [candidates, total, roleRows] = await Promise.all([
       prisma.candidateProfile.findMany({
         where,
         skip,
         take: pageSize,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        orderBy,
         include: {
           user: true,
+          ownerAdmin: { select: { id: true, email: true, role: true } },
           assessmentTokens: { orderBy: { createdAt: 'desc' }, take: 1 },
           assessments: {
             orderBy: { createdAt: 'desc' },
@@ -205,7 +244,11 @@ export class AdminService {
         null;
 
       const hasSubmission = c.submissions.length > 0;
-      const scoreValue = hasSubmission ? Number(c.submissions[0].score) : null;
+      const scoreValue = hasSubmission
+        ? Number(c.submissions[0].score)
+        : c.latestScore != null
+          ? Number(c.latestScore)
+          : null;
 
       let scoreLabel: string;
       if (hasSubmission && scoreValue != null && !Number.isNaN(scoreValue)) {
@@ -216,14 +259,22 @@ export class AdminService {
         scoreLabel = 'Not Available';
       }
 
+      const countryIso = c.phoneCountryIso || null;
+      const countryName = countryIso
+        ? countryDisplayName(countryIso, c.phoneCountry)
+        : c.phoneCountry || '—';
+
       return {
         id: c.id,
         applicationId: c.id.slice(0, 8).toUpperCase(),
         fullName: c.fullName,
         email: c.user.email,
         phone: c.fullPhone || c.phone,
-        phoneCountry: c.phoneCountry,
-        countryCode: c.countryCode,
+        phoneCountry: countryName,
+        phoneCountryIso: countryIso,
+        countryCode: countryIso,
+        countryName,
+        dialCode: c.countryCode,
         experienceLabel: getExperienceLabel(c.experienceCategory),
         yearsOfExperience: c.yearsOfExperience,
         linkedinUrl: c.linkedinUrl,
@@ -242,6 +293,11 @@ export class AdminService {
         hasAssessment: c.assessmentStatus !== 'NOT_STARTED' || hasSubmission,
         submittedAt: c.submissions[0]?.submittedAt || null,
         createdAt: c.createdAt,
+        lastActivityAt: c.lastActivityAt || c.createdAt,
+        lastActivityType: c.lastActivityType || 'REGISTERED',
+        owner: c.ownerAdmin
+          ? { id: c.ownerAdmin.id, email: c.ownerAdmin.email, role: c.ownerAdmin.role }
+          : null,
       };
     });
 
@@ -269,6 +325,8 @@ export class AdminService {
         totalPages,
         hasNextPage: page < totalPages,
         hasPreviousPage: page > 1,
+        sortBy: filterSnapshot.sortBy || 'registeredAt',
+        sortOrder: filterSnapshot.sortOrder || 'desc',
       },
     };
   }
@@ -281,6 +339,7 @@ export class AdminService {
         : mergeCandidateWhere(activeCandidateWhere(), { id }),
       include: {
         user: true,
+        ownerAdmin: { select: { id: true, email: true, role: true } },
         rejectedByAdmin: { select: { email: true } },
         deletedByAdmin: { select: { email: true } },
         assessmentTokens: { orderBy: { createdAt: 'desc' }, take: 1 },
@@ -330,9 +389,21 @@ export class AdminService {
       ...candidate,
       applicationId: candidate.id.slice(0, 8).toUpperCase(),
       phone: candidate.fullPhone || candidate.phone,
+      countryCode: candidate.phoneCountryIso,
+      countryName: countryDisplayName(candidate.phoneCountryIso, candidate.phoneCountry),
+      dialCode: candidate.countryCode,
       experienceLabel: getExperienceLabel(candidate.experienceCategory),
       journeyStatus,
       assessmentStatus: candidate.assessmentStatus,
+      lastActivityAt: candidate.lastActivityAt || candidate.createdAt,
+      lastActivityType: candidate.lastActivityType || 'REGISTERED',
+      owner: candidate.ownerAdmin
+        ? {
+            id: candidate.ownerAdmin.id,
+            email: candidate.ownerAdmin.email,
+            role: candidate.ownerAdmin.role,
+          }
+        : null,
       rejectionReason: canViewRejection ? candidate.rejectionReason : undefined,
       rejectedBy: canViewRejection ? candidate.rejectedByAdmin?.email || null : undefined,
       rejectedAt: canViewRejection ? candidate.rejectedAt : undefined,

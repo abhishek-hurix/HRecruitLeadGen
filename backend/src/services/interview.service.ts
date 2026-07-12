@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { BulkOperationAction, InterviewMode, InterviewStatus } from '@prisma/client';
+import { BulkOperationAction, CandidateActivityType, InterviewMode, InterviewStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { AppError } from '../utils/errors';
 import { writeAuditLog } from '../utils/admin-safety';
@@ -252,6 +252,14 @@ export class InterviewService {
         where: { id: { in: ids } },
         data: { selectionStatus: 'INTERVIEWED' },
       });
+      const { touchCandidateActivity } = await import('./candidate-insight.service');
+      for (const id of ids) {
+        await touchCandidateActivity(id, CandidateActivityType.INTERVIEW_SCHEDULED, {
+          actorAdminId: adminUserId,
+          operationId,
+          metadata: { interviewId: interview.id, title: input.title },
+        });
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Calendar creation failed';
       await prisma.candidateInterview.update({

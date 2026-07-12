@@ -115,6 +115,17 @@ enum AnswerMode {
   MCQ
 }
 
+enum CandidateActivityType {
+  REGISTERED
+  ASSESSMENT_SUBMITTED
+  REMINDER_SENT
+  STATUS_CHANGED
+  ROLE_ASSIGNED
+  INTERVIEW_SCHEDULED
+  INTERVIEW_COMPLETED
+  OWNER_ASSIGNED
+}
+
 model Visitor {
   id                 String     @id @default(uuid())
   visitorId          String     @unique @map("visitor_id")
@@ -177,8 +188,12 @@ model CandidateProfile {
   phoneNumber                     String?                   @map("phone_number")
   fullPhone                       String?                   @map("full_phone")
   phoneCountry                    String                    @default("India") @map("phone_country")
+  /// ISO 3166-1 alpha-2 for filtering/sorting. Display name remains phoneCountry.
+  phoneCountryIso                 String?                   @map("phone_country_iso") @db.Char(2)
   yearsOfExperience               Int?                      @map("years_of_experience")
   experienceCategory              ExperienceCategory?       @map("experience_category")
+  /// Denormalized latest submission score for server-side sorting (0–10 scale).
+  latestScore                     Decimal?                  @map("latest_score") @db.Decimal(5, 2)
   linkedinUrl                     String                    @map("linkedin_url")
   resumePath                      String                    @map("resume_path")
   appliedRole                     String                    @default("General") @map("applied_role")
@@ -218,6 +233,13 @@ model CandidateProfile {
   rejectedAt                      DateTime?                 @map("rejected_at")
   rejectedByAdminId               String?                   @map("rejected_by_admin_id")
   previousSelectionStatus         SelectionStatus?          @map("previous_selection_status")
+  /// Optional primary owner (ADMIN or SUPER_ADMIN). Only SUPER_ADMIN may assign.
+  ownerAdminId                    String?                   @map("owner_admin_id")
+  ownerAssignedAt                 DateTime?                 @map("owner_assigned_at")
+  ownerAssignedByAdminId          String?                   @map("owner_assigned_by_admin_id")
+  /// Denormalized for table sort/inactivity filters. Detailed events in CandidateActivity.
+  lastActivityAt                  DateTime?                 @map("last_activity_at")
+  lastActivityType                CandidateActivityType?    @map("last_activity_type")
   createdAt                       DateTime                  @default(now()) @map("created_at")
   updatedAt                       DateTime                  @updatedAt @map("updated_at")
 
@@ -227,11 +249,14 @@ model CandidateProfile {
   deletedByAdmin          AdminUser?                      @relation("CandidateDeletedBy", fields: [deletedByAdminId], references: [id], onDelete: SetNull)
   restoredByAdmin         AdminUser?                      @relation("CandidateRestoredBy", fields: [restoredByAdminId], references: [id], onDelete: SetNull)
   rejectedByAdmin         AdminUser?                      @relation("CandidateRejectedBy", fields: [rejectedByAdminId], references: [id], onDelete: SetNull)
+  ownerAdmin              AdminUser?                      @relation("CandidateOwner", fields: [ownerAdminId], references: [id], onDelete: SetNull)
+  ownerAssignedBy         AdminUser?                      @relation("CandidateOwnerAssignedBy", fields: [ownerAssignedByAdminId], references: [id], onDelete: SetNull)
   assessmentTokens        AssessmentToken[]
   emailVerificationTokens EmailVerificationToken[]
   assessments             Assessment[]
   submissions             Submission[]
   resumes                 CandidateResume[]
+  activities              CandidateActivity[]
   interviewParticipants   CandidateInterviewParticipant[]
   reminderDeliveries      EmailReminderDelivery[]
   bulkOperationItems      AdminBulkOperationItem[]
@@ -246,10 +271,37 @@ model CandidateProfile {
   @@index([candidateStatus, deletedAt, createdAt])
   @@index([selectedRoleId, deletedAt, createdAt])
   @@index([phoneCountry, deletedAt])
+  @@index([phoneCountryIso, deletedAt])
   @@index([assessmentStatus, deletedAt])
   @@index([createdAt])
   @@index([fullName])
+  @@index([yearsOfExperience])
+  @@index([latestScore])
+  @@index([selectedRoleName])
+  @@index([ownerAdminId, deletedAt])
+  @@index([lastActivityAt, deletedAt])
   @@map("candidate_profiles")
+}
+
+/// Append-only candidate activity history. Denormalized lastActivity* lives on CandidateProfile.
+model CandidateActivity {
+  id           String                @id @default(uuid())
+  candidateId  String                @map("candidate_id")
+  type         CandidateActivityType
+  actorAdminId String?               @map("actor_admin_id")
+  operationId  String?               @map("operation_id")
+  /// Safe summary metadata only — never tokens, passwords, or raw SMTP secrets.
+  metadata     Json?
+  occurredAt   DateTime              @default(now()) @map("occurred_at")
+  createdAt    DateTime              @default(now()) @map("created_at")
+
+  candidate  CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  actorAdmin AdminUser?       @relation("CandidateActivityActor", fields: [actorAdminId], references: [id], onDelete: SetNull)
+
+  @@index([candidateId, occurredAt])
+  @@index([type, occurredAt])
+  @@index([operationId])
+  @@map("candidate_activities")
 }
 
 /// Restricted rejection history. Reasons are Super-Admin-only via service layer.
@@ -484,6 +536,9 @@ model AdminUser {
   deletedCandidates        CandidateProfile[]      @relation("CandidateDeletedBy")
   restoredCandidates       CandidateProfile[]      @relation("CandidateRestoredBy")
   rejectedCandidates       CandidateProfile[]      @relation("CandidateRejectedBy")
+  ownedCandidates          CandidateProfile[]      @relation("CandidateOwner")
+  ownerAssignmentsMade     CandidateProfile[]      @relation("CandidateOwnerAssignedBy")
+  candidateActivities      CandidateActivity[]     @relation("CandidateActivityActor")
   rejectionHistory         CandidateRejection[]    @relation("CandidateRejectionBy")
   bulkOperations           AdminBulkOperation[]
   reminderTemplates        EmailReminderTemplate[]

@@ -11,7 +11,12 @@ import {
   getMe,
   getDashboard,
   getCandidates,
+  getCountriesList,
   getCandidateById,
+  getScoreBreakdown,
+  getCandidateActivity,
+  assignOwner,
+  listOwners,
   downloadCandidateResume,
   downloadResume,
   exportCSV,
@@ -128,6 +133,8 @@ router.use(authenticateAdmin);
 
 router.get('/me', getMe);
 router.get('/dashboard', requirePermission(Permission.VIEW_DASHBOARD), getDashboard);
+router.get('/countries', requirePermission(Permission.VIEW_CANDIDATES), getCountriesList);
+router.get('/candidate-owners', requirePermission(Permission.VIEW_CANDIDATES), listOwners);
 router.get('/candidates', requirePermission(Permission.VIEW_CANDIDATES), getCandidates);
 router.get('/candidates/export', requirePermission(Permission.EXPORT_CANDIDATES), exportCSV);
 router.post('/candidates/export', exportLimiter, requirePermission(Permission.EXPORT_CANDIDATES), exportCandidates);
@@ -154,6 +161,9 @@ router.delete(
   permanentDeleteCandidate
 );
 
+router.get('/candidates/:id/score-breakdown', requirePermission(Permission.VIEW_CANDIDATES), getScoreBreakdown);
+router.get('/candidates/:id/activity', requirePermission(Permission.VIEW_CANDIDATES), getCandidateActivity);
+router.patch('/candidates/:id/owner', requireRole(AdminRole.SUPER_ADMIN), assignOwner);
 router.get('/candidates/:id', requirePermission(Permission.VIEW_CANDIDATES), getCandidateById);
 router.get('/candidates/:id/resume', requirePermission(Permission.VIEW_RESUMES), downloadResume);
 router.get('/candidates/:id/resumes/:resumeId', requirePermission(Permission.VIEW_RESUMES), downloadCandidateResume);
