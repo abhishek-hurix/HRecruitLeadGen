@@ -17,8 +17,12 @@ let lastHeartbeatAt = 0;
 const HEARTBEAT_MIN_INTERVAL_MS = 30_000;
 
 function generateVisitorId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // http:// host — randomUUID may throw outside secure context
   }
   return `v_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 }

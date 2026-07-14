@@ -98,46 +98,28 @@ export function DateRangeCalendarFilter({
   onChange,
   minDate,
 }: DateRangeCalendarFilterProps) {
-  const isLocalHost =
-    typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1');
+  // Light theme everywhere (admin glass UI) — including http://EC2 hosts
+  const chipClass =
+    'inline-flex h-8 min-w-[7.5rem] items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2 text-[11px] font-medium text-neutral-900 shadow-sm';
 
-  const chipClass = isLocalHost
-    ? 'inline-flex h-8 min-w-[7.5rem] items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2 text-[11px] font-medium text-neutral-900 shadow-sm'
-    : 'inline-flex h-8 min-w-[7.5rem] items-center gap-1.5 rounded-lg border border-neutral-600/90 bg-neutral-900 px-2 text-[11px] font-medium text-neutral-100 shadow-sm';
+  const popupClass =
+    'fixed z-[200] w-[210px] rounded-lg border border-neutral-200 bg-white p-2 text-neutral-900 shadow-2xl';
 
-  const popupClass = isLocalHost
-    ? 'fixed z-[200] w-[210px] rounded-lg border border-neutral-200 bg-white p-2 text-neutral-900 shadow-2xl'
-    : 'fixed z-[200] w-[210px] rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-neutral-100 shadow-2xl';
+  const navBtnClass =
+    'inline-flex h-6 w-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100 disabled:opacity-30';
 
-  const navBtnClass = isLocalHost
-    ? 'inline-flex h-6 w-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100 disabled:opacity-30'
-    : 'inline-flex h-6 w-6 items-center justify-center rounded text-neutral-300 hover:bg-neutral-800 disabled:opacity-30';
+  const weekdayClass = 'py-0.5 text-center text-[9px] font-medium text-neutral-400';
 
-  const weekdayClass = isLocalHost
-    ? 'py-0.5 text-center text-[9px] font-medium text-neutral-400'
-    : 'py-0.5 text-center text-[9px] font-medium text-neutral-500';
+  const dayIdleClass = 'text-neutral-800 hover:bg-neutral-100';
 
-  const dayIdleClass = isLocalHost
-    ? 'text-neutral-800 hover:bg-neutral-100'
-    : 'text-neutral-200 hover:bg-neutral-800';
+  const dayDisabledClass = 'cursor-not-allowed text-neutral-300';
 
-  const dayDisabledClass = isLocalHost
-    ? 'cursor-not-allowed text-neutral-300'
-    : 'cursor-not-allowed text-neutral-600';
+  const iconBtnClass = 'shrink-0 text-neutral-500 hover:text-neutral-800';
 
-  const iconBtnClass = isLocalHost
-    ? 'shrink-0 text-neutral-500 hover:text-neutral-800'
-    : 'shrink-0 text-neutral-400 hover:text-neutral-200';
+  const inputClass =
+    'w-[4.6rem] bg-transparent text-[11px] font-medium text-neutral-900 placeholder:text-neutral-400 outline-none tabular-nums';
 
-  const inputClass = isLocalHost
-    ? 'w-[4.6rem] bg-transparent text-[11px] font-medium text-neutral-900 placeholder:text-neutral-400 outline-none tabular-nums'
-    : 'w-[4.6rem] bg-transparent text-[11px] font-medium text-neutral-100 placeholder:text-neutral-500 outline-none tabular-nums';
-
-  const hintClass = isLocalHost
-    ? 'mt-1.5 text-[9px] text-neutral-500'
-    : 'mt-1.5 text-[9px] text-neutral-500';
+  const hintClass = 'mt-1.5 text-[9px] text-neutral-500';
   const rootRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const year = new Date().getFullYear();

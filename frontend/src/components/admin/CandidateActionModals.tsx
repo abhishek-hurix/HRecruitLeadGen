@@ -7,6 +7,7 @@ import {
   getWhatsAppTemplates,
 } from '../../api/admin';
 import { getAdminActionErrorMessage } from '../../utils/apiErrors';
+import { createClientId } from '../../utils/id';
 import type { ExportFormat, ExportScope, WhatsAppTemplate } from '../../types/candidate-management';
 import {
   buildWhatsAppUrl,
@@ -741,7 +742,7 @@ export function InterviewModal({
               gapMinutes,
               mode: count === 1 ? 'SINGLE' : mode,
               createMeet,
-              idempotencyKey: crypto.randomUUID(),
+              idempotencyKey: createClientId('interview'),
               interviewerEmails: interviewers
                 .split(',')
                 .map((e) => e.trim())

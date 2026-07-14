@@ -49,6 +49,7 @@ import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { useCandidateSelection } from '../../hooks/useCandidateSelection';
 import { EXPERIENCE_OPTIONS } from '../../utils/experience';
 import { getAdminActionErrorMessage } from '../../utils/apiErrors';
+import { createClientId } from '../../utils/id';
 import {
   clampPage,
   getPageRange,
@@ -319,60 +320,8 @@ export function CandidatesPage() {
     };
 
     try {
-      if (payload.mode === 'IDS' && payload.candidateIds.length > 0) {
-        let sent = 0;
-        let failed = 0;
-        let skipped = 0;
-        const errors: EmailSendProgressState['errors'] = [];
-
-        for (let i = 0; i < payload.candidateIds.length; i += 1) {
-          const candidateId = payload.candidateIds[i];
-          try {
-            const result = await bulkSendReminders(
-              { mode: 'IDS', candidateIds: [candidateId] },
-              templateId,
-              crypto.randomUUID()
-            );
-            sent += result.summary?.succeeded ?? 0;
-            failed += result.summary?.failed ?? 0;
-            skipped += result.summary?.skipped ?? 0;
-            for (const err of result.errors || []) {
-              errors.push({ candidateId: err.candidateId, message: err.message });
-            }
-          } catch (e) {
-            failed += 1;
-            errors.push({ candidateId, message: getAdminActionErrorMessage(e) });
-          }
-
-          const processed = i + 1;
-          bumpEmailActivity();
-          setEmailProgress({
-            total: payload.candidateIds.length,
-            processed,
-            sent,
-            failed,
-            skipped,
-            status: 'sending',
-            errors: [...errors],
-            stuck: false,
-          });
-        }
-
-        await refreshAfterMutation();
-        applyDone({
-          total: payload.candidateIds.length,
-          processed: payload.candidateIds.length,
-          sent,
-          failed,
-          skipped,
-          status: 'done',
-          errors,
-          stuck: false,
-        });
-        return;
-      }
-
-      // ALL_MATCHING (or large filter selection): one request + soft progress ticks
+      // One bulk request (IDS or ALL_MATCHING) — avoids http://EC2 crypto.randomUUID crash
+      // and bulk rate-limit from N sequential calls. Soft ticks animate progress.
       let soft = 0;
       const tickMs = Math.max(350, Math.min(1800, Math.floor(12000 / Math.max(total, 1))));
       const tickId = window.setInterval(() => {
@@ -386,7 +335,7 @@ export function CandidatesPage() {
       }, tickMs);
 
       try {
-        const result = await bulkSendReminders(payload, templateId, crypto.randomUUID());
+        const result = await bulkSendReminders(payload, templateId, createClientId('reminder'));
         window.clearInterval(tickId);
         await refreshAfterMutation(result, false);
         const sent = result.summary?.succeeded ?? 0;
