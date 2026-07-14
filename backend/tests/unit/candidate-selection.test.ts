@@ -48,11 +48,11 @@ describe('candidate-selection.service', () => {
     });
   });
 
-  it('excludes rejected candidates from the main list by default', () => {
+  it('excludes rejected and shortlisted candidates from the main list by default', () => {
     const where = buildCandidateListWhere({});
     expect(where).toMatchObject({
       AND: expect.arrayContaining([
-        { selectionStatus: { not: 'REJECTED' } },
+        { selectionStatus: { notIn: ['REJECTED', 'SHORTLISTED'] } },
         { isTestUser: false },
       ]),
     });

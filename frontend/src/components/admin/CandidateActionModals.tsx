@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
-import Lottie from 'lottie-react';
+import { useEffect, useState } from 'react';
 import {
   getReminderTemplates,
   previewReminderTemplate,
@@ -9,7 +8,6 @@ import {
 } from '../../api/admin';
 import { getAdminActionErrorMessage } from '../../utils/apiErrors';
 import type { BulkResult, ExportFormat, ExportScope, WhatsAppTemplate } from '../../types/candidate-management';
-import emailSentAnimation from '../../assets/email-sent.json';
 import {
   buildWhatsAppUrl,
   candidateWhatsAppVars,
@@ -278,20 +276,16 @@ export function ReminderModal({
   count,
   onClose,
   onConfirm,
-  onRetryFailed,
 }: {
   count: number;
   onClose: () => void;
-  onConfirm: (templateId: string) => Promise<BulkResult | void>;
-  onRetryFailed?: (templateId: string, failedIds: string[]) => Promise<BulkResult | void>;
+  onConfirm: (templateId: string) => void;
 }) {
   const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
   const [templateId, setTemplateId] = useState('');
   const [preview, setPreview] = useState<{ subject: string; bodyHtml: string } | null>(null);
-  const [phase, setPhase] = useState<'form' | 'sending' | 'done'>('form');
-  const [result, setResult] = useState<BulkResult | null>(null);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showLogs, setShowLogs] = useState(false);
 
   useEffect(() => {
     getReminderTemplates().then((list) => {
@@ -305,117 +299,28 @@ export function ReminderModal({
     previewReminderTemplate(templateId).then(setPreview).catch(() => setPreview(null));
   }, [templateId]);
 
-  const stats = useMemo(() => {
-    if (!result) return null;
-    const email = result.email;
-    return {
-      sent: email?.sent ?? result.summary.succeeded,
-      failed: email?.failed ?? result.summary.failed,
-      skipped: email?.skipped ?? result.summary.skipped,
-      total: result.summary.requested,
-    };
-  }, [result]);
-
-  const hasIssues = Boolean(stats && (stats.failed > 0 || stats.skipped > 0));
-
-  useEffect(() => {
-    if (phase !== 'done' || !stats || hasIssues) return;
-    const timer = window.setTimeout(() => onClose(), 3500);
-    return () => window.clearTimeout(timer);
-  }, [phase, stats, hasIssues, onClose]);
-
-  const runSend = async () => {
-    if (!templateId) return;
-    setPhase('sending');
-    setError(null);
-    setShowLogs(false);
-    setResult(null);
-    try {
-      const next = await onConfirm(templateId);
-      if (next) setResult(next);
-      setPhase('done');
-    } catch (e) {
-      setError(getAdminActionErrorMessage(e));
-      setPhase('form');
-    }
-  };
-
-  const showingProgress = phase === 'sending' || phase === 'done';
-
   return (
-    <ModalShell
-      title="Send Reminder Email"
-      count={count}
-      onClose={onClose}
-      closeDisabled={phase === 'sending'}
-    >
+    <ModalShell title="Send Reminder Email" count={count} onClose={onClose} closeDisabled={sending}>
       <div className="space-y-3">
-        {!showingProgress && (
-          <>
-            <select
-              className="filter-glass w-full"
-              value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
-              aria-label="Reminder template"
-            >
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-            {preview && (
-              <div className="rounded-xl border border-white/70 bg-white/55 p-3 shadow-sm backdrop-blur-md">
-                <p className="mb-1 text-xs font-semibold text-neutral-700">Preview subject</p>
-                <p className="mb-2 text-sm font-medium text-neutral-950">{preview.subject}</p>
-                <div
-                  className="text-xs leading-relaxed text-neutral-600 [&_strong]:font-semibold [&_strong]:text-neutral-900"
-                  dangerouslySetInnerHTML={{ __html: preview.bodyHtml }}
-                />
-              </div>
-            )}
-          </>
-        )}
-
-        {showingProgress && (
-          <div className="relative flex flex-col items-center gap-2 py-2" role="status" aria-live="polite">
-            {phase === 'done' && (
-              <button
-                type="button"
-                onClick={onClose}
-                className="absolute right-0 top-0 inline-flex h-6 w-6 items-center justify-center rounded text-lg leading-none text-neutral-400 hover:bg-neutral-100 hover:text-neutral-800"
-                aria-label="Close"
-                title="Close"
-              >
-                ×
-              </button>
-            )}
-            <Lottie
-              animationData={emailSentAnimation}
-              loop={phase === 'sending'}
-              className="h-36 w-36"
+        <select
+          className="filter-glass w-full"
+          value={templateId}
+          onChange={(e) => setTemplateId(e.target.value)}
+          aria-label="Reminder template"
+          disabled={sending}
+        >
+          {templates.map((t) => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
+        {preview && (
+          <div className="rounded-xl border border-white/70 bg-white/55 p-3 shadow-sm backdrop-blur-md">
+            <p className="mb-1 text-xs font-semibold text-neutral-700">Preview subject</p>
+            <p className="mb-2 text-sm font-medium text-neutral-950">{preview.subject}</p>
+            <div
+              className="text-xs leading-relaxed text-neutral-600 [&_strong]:font-semibold [&_strong]:text-neutral-900"
+              dangerouslySetInnerHTML={{ __html: preview.bodyHtml }}
             />
-            {phase === 'sending' && (
-              <p className="text-sm font-medium text-neutral-700">Sending...</p>
-            )}
-            {stats && (
-              <p className="text-center text-sm text-neutral-700">
-                Sent {stats.sent}, failed {stats.failed}, skipped {stats.skipped} (of {stats.total}).
-              </p>
-            )}
-            {showLogs && result?.errors?.length ? (
-              <ul className="mt-1 max-h-40 w-full overflow-y-auto rounded-lg border border-red-100 bg-red-50/80 px-3 py-2 text-left text-xs text-red-700">
-                {result.errors.map((err, idx) => (
-                  <li key={`${err.candidateId || 'err'}-${idx}`} className="py-0.5">
-                    {err.message}
-                    {err.candidateId ? ` (${err.candidateId.slice(0, 8)})` : ''}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {showLogs && (!result?.errors || result.errors.length === 0) && (
-              <p className="text-center text-xs text-neutral-500">
-                No detailed error logs were returned for this send.
-              </p>
-            )}
           </div>
         )}
 
@@ -423,58 +328,29 @@ export function ReminderModal({
           <p className="text-center text-sm text-red-600" role="alert">{error}</p>
         )}
 
-        {phase === 'form' && (
-          <div className="flex flex-wrap justify-center gap-3 pt-2">
-            <button type="button" onClick={onClose} className={glassBtnSecondaryClass}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!templateId}
-              onClick={runSend}
-              className={glassBtnPrimaryClass}
-            >
-              Send Reminder
-            </button>
-          </div>
-        )}
-
-        {phase === 'done' && hasIssues && (
-          <div className="flex flex-wrap justify-center gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => setShowLogs((v) => !v)}
-              className={glassBtnSecondaryClass}
-            >
-              {showLogs ? 'Hide Logs' : 'Check Logs'}
-            </button>
-            {result?.failedCandidateIds && result.failedCandidateIds.length > 0 && onRetryFailed && (
-              <button
-                type="button"
-                disabled={!templateId}
-                onClick={async () => {
-                  setPhase('sending');
-                  setError(null);
-                  setShowLogs(false);
-                  try {
-                    const next = await onRetryFailed(templateId, result.failedCandidateIds!);
-                    if (next) setResult(next);
-                    setPhase('done');
-                  } catch (e) {
-                    setError(getAdminActionErrorMessage(e));
-                    setPhase('done');
-                  }
-                }}
-                className={glassBtnPrimaryClass}
-              >
-                Retry failed
-              </button>
-            )}
-            <button type="button" onClick={onClose} className={glassBtnSecondaryClass}>
-              Close
-            </button>
-          </div>
-        )}
+        <div className="flex flex-wrap justify-center gap-3 pt-2">
+          <button type="button" onClick={onClose} disabled={sending} className={glassBtnSecondaryClass}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!templateId || sending}
+            onClick={() => {
+              if (!templateId) return;
+              setSending(true);
+              setError(null);
+              try {
+                onConfirm(templateId);
+              } catch (e) {
+                setError(getAdminActionErrorMessage(e));
+                setSending(false);
+              }
+            }}
+            className={glassBtnPrimaryClass}
+          >
+            Send Reminder
+          </button>
+        </div>
       </div>
     </ModalShell>
   );

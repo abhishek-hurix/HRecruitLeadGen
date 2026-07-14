@@ -15,14 +15,14 @@ describe('Experience utilities', () => {
   });
 
   it('returns correct labels', () => {
-    expect(getExperienceLabel(ExperienceCategory.FRESHER)).toBe('Fresher (0 Years)');
-    expect(getExperienceLabel(ExperienceCategory.TWO_THREE)).toBe('2-3 Years');
+    expect(getExperienceLabel(ExperienceCategory.FRESHER)).toBe('Fresher');
+    expect(getExperienceLabel(ExperienceCategory.TWO_THREE)).toBe('3 Years');
     expect(getExperienceLabel(ExperienceCategory.TEN_PLUS)).toBe('10+ Years');
   });
 
   it('maps categories to years', () => {
     expect(getExperienceYears(ExperienceCategory.FRESHER)).toBe(0);
-    expect(getExperienceYears(ExperienceCategory.FIVE_SEVEN)).toBe(5);
+    expect(getExperienceYears(ExperienceCategory.FIVE_SEVEN)).toBe(7);
     expect(getExperienceYears(ExperienceCategory.TEN_PLUS)).toBe(10);
   });
 

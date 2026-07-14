@@ -288,7 +288,7 @@ export async function previewReminder(req: AuthRequest, res: Response, next: Nex
       assignedRole: sample.assignedRole || 'Software Engineer',
       assessmentStatus: sample.assessmentStatus || 'NOT_STARTED',
       assessmentLink: sample.assessmentLink || '',
-      companyName: sample.companyName || 'Hurix Digital',
+      companyName: sample.companyName || 'Team Hurix Digital',
     });
     res.json({ success: true, data });
   } catch (error) {

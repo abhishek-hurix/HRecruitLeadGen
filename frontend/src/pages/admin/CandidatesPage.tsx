@@ -22,6 +22,10 @@ import {
   StatusChangeModal,
   WhatsAppSendModal,
 } from '../../components/admin/CandidateActionModals';
+import {
+  EmailSendProgressBanner,
+  type EmailSendProgressState,
+} from '../../components/admin/EmailSendProgressBanner';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import {
   getCandidates,
@@ -103,6 +107,9 @@ export function CandidatesPage() {
   const [listError, setListError] = useState<{ message: string; requestId?: string } | null>(null);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const headerMenuRef = useRef<HTMLDivElement>(null);
+  const [emailProgress, setEmailProgress] = useState<EmailSendProgressState | null>(null);
+  const emailStuckTimerRef = useRef<number | null>(null);
+  const emailSuccessTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -157,7 +164,7 @@ export function CandidatesPage() {
   });
   const countries = countriesData?.length ? countriesData : FALLBACK_COUNTRIES;
 
-  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: [
       'candidates',
       search,
@@ -263,7 +270,162 @@ export function CandidatesPage() {
 
   const actionCount = actionTarget === 'bulk' ? selection.effectiveCount : 1;
 
-  const refreshAfterMutation = async (_result: BulkResult, clearAfter = false) => {
+  const clearEmailTimers = () => {
+    if (emailStuckTimerRef.current != null) {
+      window.clearTimeout(emailStuckTimerRef.current);
+      emailStuckTimerRef.current = null;
+    }
+    if (emailSuccessTimerRef.current != null) {
+      window.clearTimeout(emailSuccessTimerRef.current);
+      emailSuccessTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => () => clearEmailTimers(), []);
+
+  const bumpEmailActivity = () => {
+    if (emailStuckTimerRef.current != null) {
+      window.clearTimeout(emailStuckTimerRef.current);
+    }
+    emailStuckTimerRef.current = window.setTimeout(() => {
+      setEmailProgress((prev) => (prev && prev.status === 'sending' ? { ...prev, stuck: true } : prev));
+    }, 45000);
+  };
+
+  const startReminderSend = async (templateId: string) => {
+    const payload = resolveSelection();
+    const total = Math.max(1, actionCount);
+    clearEmailTimers();
+    setModal(null);
+    setEmailProgress({
+      total,
+      processed: 0,
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      status: 'sending',
+      errors: [],
+      stuck: false,
+    });
+    bumpEmailActivity();
+
+    const applyDone = (next: EmailSendProgressState) => {
+      clearEmailTimers();
+      setEmailProgress(next);
+      const hasIssues = next.failed > 0 || next.skipped > 0 || next.errors.length > 0;
+      if (!hasIssues) {
+        emailSuccessTimerRef.current = window.setTimeout(() => setEmailProgress(null), 5000);
+      }
+    };
+
+    try {
+      if (payload.mode === 'IDS' && payload.candidateIds.length > 0) {
+        let sent = 0;
+        let failed = 0;
+        let skipped = 0;
+        const errors: EmailSendProgressState['errors'] = [];
+
+        for (let i = 0; i < payload.candidateIds.length; i += 1) {
+          const candidateId = payload.candidateIds[i];
+          try {
+            const result = await bulkSendReminders(
+              { mode: 'IDS', candidateIds: [candidateId] },
+              templateId,
+              crypto.randomUUID()
+            );
+            sent += result.summary?.succeeded ?? 0;
+            failed += result.summary?.failed ?? 0;
+            skipped += result.summary?.skipped ?? 0;
+            for (const err of result.errors || []) {
+              errors.push({ candidateId: err.candidateId, message: err.message });
+            }
+          } catch (e) {
+            failed += 1;
+            errors.push({ candidateId, message: getAdminActionErrorMessage(e) });
+          }
+
+          const processed = i + 1;
+          bumpEmailActivity();
+          setEmailProgress({
+            total: payload.candidateIds.length,
+            processed,
+            sent,
+            failed,
+            skipped,
+            status: 'sending',
+            errors: [...errors],
+            stuck: false,
+          });
+        }
+
+        await refreshAfterMutation();
+        applyDone({
+          total: payload.candidateIds.length,
+          processed: payload.candidateIds.length,
+          sent,
+          failed,
+          skipped,
+          status: 'done',
+          errors,
+          stuck: false,
+        });
+        return;
+      }
+
+      // ALL_MATCHING (or large filter selection): one request + soft progress ticks
+      let soft = 0;
+      const tickMs = Math.max(350, Math.min(1800, Math.floor(12000 / Math.max(total, 1))));
+      const tickId = window.setInterval(() => {
+        soft = Math.min(total - 1, soft + 1);
+        bumpEmailActivity();
+        setEmailProgress((prev) =>
+          prev && prev.status === 'sending'
+            ? { ...prev, processed: soft, stuck: false }
+            : prev
+        );
+      }, tickMs);
+
+      try {
+        const result = await bulkSendReminders(payload, templateId, crypto.randomUUID());
+        window.clearInterval(tickId);
+        await refreshAfterMutation(result, false);
+        const sent = result.summary?.succeeded ?? 0;
+        const failed = result.summary?.failed ?? 0;
+        const skipped = result.summary?.skipped ?? 0;
+        const requested = result.summary?.requested ?? total;
+        applyDone({
+          total: requested,
+          processed: requested,
+          sent,
+          failed,
+          skipped,
+          status: 'done',
+          errors: (result.errors || []).map((err) => ({
+            candidateId: err.candidateId,
+            message: err.message,
+          })),
+          stuck: false,
+        });
+      } catch (e) {
+        window.clearInterval(tickId);
+        throw e;
+      }
+    } catch (e) {
+      applyDone({
+        total,
+        processed: 0,
+        sent: 0,
+        failed: total,
+        skipped: 0,
+        status: 'error',
+        message: getAdminActionErrorMessage(e),
+        errors: [{ message: getAdminActionErrorMessage(e) }],
+        stuck: false,
+      });
+    }
+  };
+
+  const refreshAfterMutation = async (_result?: BulkResult, clearAfter = false) => {
     await queryClient.invalidateQueries({ queryKey: ['candidates'] });
     await queryClient.invalidateQueries({ queryKey: ['test-users'] });
     await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
@@ -668,7 +830,6 @@ export function CandidatesPage() {
           {data && (
             <p className="text-xs sm:text-sm text-hurix-gray mt-0.5 truncate">
               <span className="font-semibold text-hurix-charcoal">{totalMatching}</span> candidates
-              {isFetching && <span className="ml-2 text-xs">Updating…</span>}
             </p>
           )}
         </div>
@@ -696,6 +857,16 @@ export function CandidatesPage() {
         </div>
       )}
     >
+      {emailProgress && (
+        <EmailSendProgressBanner
+          progress={emailProgress}
+          onDismiss={() => {
+            clearEmailTimers();
+            setEmailProgress(null);
+          }}
+        />
+      )}
+
       {copyNotice && (
         <div className="mb-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800" role="status">
           {copyNotice}
@@ -823,9 +994,6 @@ export function CandidatesPage() {
           </div>
           </div>
         </div>
-        {isFetching && !isLoading && (
-          <p className="text-xs text-hurix-gray" aria-live="polite">Updating results…</p>
-        )}
       </div>
 
       {data && (
@@ -1152,25 +1320,9 @@ export function CandidatesPage() {
         <ReminderModal
           count={actionCount}
           onClose={() => setModal(null)}
-          onConfirm={async (templateId) =>
-            runAction(
-              () => bulkSendReminders(resolveSelection(), templateId, crypto.randomUUID()),
-              false,
-              'reminder'
-            )
-          }
-          onRetryFailed={async (templateId, failedIds) =>
-            runAction(
-              () =>
-                bulkSendReminders(
-                  { mode: 'IDS', candidateIds: failedIds },
-                  templateId,
-                  crypto.randomUUID()
-                ),
-              false,
-              'reminder'
-            )
-          }
+          onConfirm={(templateId) => {
+            void startReminderSend(templateId);
+          }}
         />
       )}
       {modal === 'delete' && (

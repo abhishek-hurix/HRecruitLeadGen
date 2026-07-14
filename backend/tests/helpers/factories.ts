@@ -41,11 +41,11 @@ export async function createTestVisitor(overrides: Partial<{
 export async function createTestCandidate(email?: string) {
   const prisma = await getTestPrisma();
   const userEmail = email || `candidate.${randomUUID().slice(0, 8)}@hurix.com`;
-  return prisma.user.create({
+  const user = await prisma.user.create({
     data: {
       email: userEmail,
       passwordHash: await bcrypt.hash('TestPass123!', 12),
-      candidateProfile: {
+      candidateProfiles: {
         create: {
           fullName: 'Test Candidate',
           phone: '9876543210',
@@ -60,8 +60,14 @@ export async function createTestCandidate(email?: string) {
         },
       },
     },
-    include: { candidateProfile: true },
+    include: { candidateProfiles: true },
   });
+
+  // Compatibility shim: older tests still read user.candidateProfile
+  return {
+    ...user,
+    candidateProfile: user.candidateProfiles[0] ?? null,
+  };
 }
 
 export function mockUtmPayload() {

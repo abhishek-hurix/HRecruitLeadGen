@@ -27,7 +27,6 @@ export function candidateWhatsAppVars(candidate: {
     assignedRole: candidate.roleLabel || candidate.appliedRole || 'Not Assigned',
     assessmentStatus: (candidate.assessmentStatus || '').replace(/_/g, ' '),
     applicationId: (candidate.applicationId || candidate.id.slice(0, 8)).toUpperCase(),
-    companyName: 'Hurix Digital',
   };
 }
 

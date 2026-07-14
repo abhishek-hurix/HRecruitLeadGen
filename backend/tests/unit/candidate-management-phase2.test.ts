@@ -33,7 +33,8 @@ describe('candidate list query validation', () => {
   });
 
   it('validates inactivity and role assignment', () => {
-    expect(() => parseCandidateListQuery({ inactivityDays: '14' })).toThrow(/7, 30, or 90/);
+    expect(() => parseCandidateListQuery({ inactivityDays: '0' })).toThrow(/inactivityDays/i);
+    expect(parseCandidateListQuery({ inactivityDays: '14' }).inactivityDays).toBe(14);
     expect(parseCandidateListQuery({ inactivityDays: '30' }).inactivityDays).toBe(30);
     expect(() => parseCandidateListQuery({ roleAssignment: 'nope' })).toThrow(/roleAssignment/);
     expect(parseCandidateListQuery({ roleAssignment: 'unassigned' }).roleAssignment).toBe('unassigned');

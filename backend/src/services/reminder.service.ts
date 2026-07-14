@@ -23,7 +23,7 @@ const DEFAULT_TEMPLATES = [
 <p>Current status: {{assessmentStatus}}</p>
 <p>{{#assessmentLink}}<a href="{{assessmentLink}}">Continue your assessment</a>{{/assessmentLink}}</p>
 <p><a href="${CANDIDATE_PORTAL_URL}">${CANDIDATE_PORTAL_URL}</a></p>
-<p>Thank you,<br/>{{companyName}}</p>`,
+<p>Thank you,<br/>Team Hurix Digital</p>`,
   },
   {
     name: 'Application Follow-up',
@@ -32,7 +32,7 @@ const DEFAULT_TEMPLATES = [
 <p>We are reviewing applications for <strong>{{assignedRole}}</strong>. Please ensure your profile is complete.</p>
 <p>Application ID: {{applicationId}}</p>
 <p><a href="${CANDIDATE_PORTAL_URL}">${CANDIDATE_PORTAL_URL}</a></p>
-<p>Regards,<br/>{{companyName}}</p>`,
+<p>Regards,<br/>Team Hurix Digital</p>`,
   },
 ];
 
@@ -60,8 +60,8 @@ async function ensureDefaultTemplates(adminUserId: string) {
       });
       continue;
     }
-    // Keep seeded defaults in sync (portal link, etc.) without wiping custom-named templates.
-    if (!existing.bodyHtml.includes(CANDIDATE_PORTAL_URL)) {
+    // Keep seeded defaults in sync (portal link, sign-off, etc.) without wiping custom-named templates.
+    if (!existing.bodyHtml.includes(CANDIDATE_PORTAL_URL) || existing.bodyHtml.includes('{{companyName}}')) {
       await prisma.emailReminderTemplate.update({
         where: { id: existing.id },
         data: {
@@ -245,7 +245,7 @@ export class ReminderService {
             assignedRole: c.selectedRoleName || c.appliedRole || 'General',
             assessmentStatus: c.assessmentStatus,
             assessmentLink: '',
-            companyName: 'Hurix Digital',
+            companyName: 'Team Hurix Digital',
           };
 
           const subject = renderTemplate(template.subject, vars);

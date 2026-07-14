@@ -142,7 +142,7 @@ export function ShortlistedCandidatesPage() {
   });
   const countries = countriesData?.length ? countriesData : FALLBACK_COUNTRIES;
 
-  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: [
       'shortlisted-candidates',
       search,
@@ -690,7 +690,6 @@ export function ShortlistedCandidatesPage() {
           {data && (
             <p className="text-xs sm:text-sm text-hurix-gray mt-0.5 truncate">
               <span className="font-semibold text-hurix-charcoal">{totalMatching}</span> candidates
-              {isFetching && <span className="ml-2 text-xs">Updating…</span>}
             </p>
           )}
         </div>
@@ -837,9 +836,6 @@ export function ShortlistedCandidatesPage() {
           </div>
           </div>
         </div>
-        {isFetching && !isLoading && (
-          <p className="text-xs text-hurix-gray" aria-live="polite">Updating results…</p>
-        )}
       </div>
 
       {data && (

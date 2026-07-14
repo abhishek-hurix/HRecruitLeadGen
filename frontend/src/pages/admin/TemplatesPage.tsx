@@ -20,16 +20,17 @@ import {
   updateWhatsAppTemplate,
 } from '../../api/admin';
 import { getAdminActionErrorMessage } from '../../utils/apiErrors';
+import { htmlToPlainEmail, plainToEmailHtml } from '../../utils/emailBody';
 import type { ReminderTemplate, WhatsAppTemplate } from '../../types/candidate-management';
 
-type EmailForm = { name: string; subject: string; bodyHtml: string };
+type EmailForm = { name: string; subject: string; bodyText: string };
 type WhatsAppForm = { name: string; bodyText: string };
 
-const emptyEmailForm: EmailForm = { name: '', subject: '', bodyHtml: '' };
+const emptyEmailForm: EmailForm = { name: '', subject: '', bodyText: '' };
 const emptyWhatsAppForm: WhatsAppForm = { name: '', bodyText: '' };
 
 const VARIABLE_HINT =
-  'Variables: {{candidateName}}, {{assignedRole}}, {{applicationId}}, {{assessmentStatus}}, {{companyName}}';
+  'Variables: {{candidateName}}, {{assignedRole}}, {{applicationId}}, {{assessmentStatus}}';
 
 function TemplateFormShell({
   title,
@@ -84,7 +85,7 @@ export function TemplatesPage() {
     setEmailForm({
       name: template.name,
       subject: template.subject,
-      bodyHtml: template.bodyHtml,
+      bodyText: htmlToPlainEmail(template.bodyHtml),
     });
     setError(null);
     setEmailFormOpen(true);
@@ -109,8 +110,13 @@ export function TemplatesPage() {
 
   const saveEmailMutation = useMutation({
     mutationFn: async () => {
-      if (editingEmail) return updateReminderTemplate(editingEmail.id, emailForm);
-      return createReminderTemplate(emailForm);
+      const payload = {
+        name: emailForm.name,
+        subject: emailForm.subject,
+        bodyHtml: plainToEmailHtml(emailForm.bodyText),
+      };
+      if (editingEmail) return updateReminderTemplate(editingEmail.id, payload);
+      return createReminderTemplate(payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reminder-templates'] });
@@ -330,15 +336,26 @@ export function TemplatesPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-neutral-800">Email body (HTML)</label>
+              <label className="mb-1 block text-sm font-medium text-neutral-800">Email body</label>
               <textarea
                 className={`${glassFieldClass} min-h-[160px]`}
                 style={{ backgroundImage: 'none', paddingRight: '0.875rem' }}
-                value={emailForm.bodyHtml}
-                onChange={(e) => setEmailForm({ ...emailForm, bodyHtml: e.target.value })}
-                placeholder="<p>Hello {{candidateName}},</p>"
+                value={emailForm.bodyText}
+                onChange={(e) => setEmailForm({ ...emailForm, bodyText: e.target.value })}
+                placeholder={`Hello {{candidateName}},
+
+We are reviewing applications for {{assignedRole}}. Please ensure your profile is complete.
+
+Application ID: {{applicationId}}
+
+https://candidates.hurixsystems.com/
+
+Regards,
+Team Hurix Digital`}
               />
-              <p className="mt-1 text-xs text-neutral-500">{VARIABLE_HINT}</p>
+              <p className="mt-1 text-xs text-neutral-500">
+                Type normally — use Enter for new lines. {VARIABLE_HINT}
+              </p>
             </div>
             {error && <p className="text-center text-sm text-red-600" role="alert">{error}</p>}
             <div className="flex justify-center gap-3 pt-2">

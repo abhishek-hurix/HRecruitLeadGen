@@ -15,7 +15,7 @@ Current status: {{assessmentStatus}}
 ${CANDIDATE_PORTAL_URL}
 
 Thank you,
-{{companyName}}`,
+Team Hurix Digital`,
   },
   {
     name: 'Application Follow-up',
@@ -28,7 +28,7 @@ Application ID: {{applicationId}}
 ${CANDIDATE_PORTAL_URL}
 
 Regards,
-{{companyName}}`,
+Team Hurix Digital`,
   },
 ];
 
@@ -54,7 +54,7 @@ async function ensureDefaultTemplates(adminUserId: string) {
       });
       continue;
     }
-    if (!existing.bodyText.includes(CANDIDATE_PORTAL_URL)) {
+    if (!existing.bodyText.includes(CANDIDATE_PORTAL_URL) || existing.bodyText.includes('{{companyName}}')) {
       await prisma.whatsAppMessageTemplate.update({
         where: { id: existing.id },
         data: { bodyText: t.bodyText, updatedById: adminUserId },

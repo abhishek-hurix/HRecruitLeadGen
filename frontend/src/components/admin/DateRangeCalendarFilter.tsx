@@ -98,6 +98,46 @@ export function DateRangeCalendarFilter({
   onChange,
   minDate,
 }: DateRangeCalendarFilterProps) {
+  const isLocalHost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1');
+
+  const chipClass = isLocalHost
+    ? 'inline-flex h-8 min-w-[7.5rem] items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2 text-[11px] font-medium text-neutral-900 shadow-sm'
+    : 'inline-flex h-8 min-w-[7.5rem] items-center gap-1.5 rounded-lg border border-neutral-600/90 bg-neutral-900 px-2 text-[11px] font-medium text-neutral-100 shadow-sm';
+
+  const popupClass = isLocalHost
+    ? 'fixed z-[200] w-[210px] rounded-lg border border-neutral-200 bg-white p-2 text-neutral-900 shadow-2xl'
+    : 'fixed z-[200] w-[210px] rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-neutral-100 shadow-2xl';
+
+  const navBtnClass = isLocalHost
+    ? 'inline-flex h-6 w-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100 disabled:opacity-30'
+    : 'inline-flex h-6 w-6 items-center justify-center rounded text-neutral-300 hover:bg-neutral-800 disabled:opacity-30';
+
+  const weekdayClass = isLocalHost
+    ? 'py-0.5 text-center text-[9px] font-medium text-neutral-400'
+    : 'py-0.5 text-center text-[9px] font-medium text-neutral-500';
+
+  const dayIdleClass = isLocalHost
+    ? 'text-neutral-800 hover:bg-neutral-100'
+    : 'text-neutral-200 hover:bg-neutral-800';
+
+  const dayDisabledClass = isLocalHost
+    ? 'cursor-not-allowed text-neutral-300'
+    : 'cursor-not-allowed text-neutral-600';
+
+  const iconBtnClass = isLocalHost
+    ? 'shrink-0 text-neutral-500 hover:text-neutral-800'
+    : 'shrink-0 text-neutral-400 hover:text-neutral-200';
+
+  const inputClass = isLocalHost
+    ? 'w-[4.6rem] bg-transparent text-[11px] font-medium text-neutral-900 placeholder:text-neutral-400 outline-none tabular-nums'
+    : 'w-[4.6rem] bg-transparent text-[11px] font-medium text-neutral-100 placeholder:text-neutral-500 outline-none tabular-nums';
+
+  const hintClass = isLocalHost
+    ? 'mt-1.5 text-[9px] text-neutral-500'
+    : 'mt-1.5 text-[9px] text-neutral-500';
   const rootRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const year = new Date().getFullYear();
@@ -286,14 +326,11 @@ export function DateRangeCalendarFilter({
   const canPrev =
     viewYear > min.getFullYear() || (viewYear === min.getFullYear() && viewMonth > min.getMonth());
 
-  const chipClass =
-    'inline-flex h-8 min-w-[7.5rem] items-center gap-1.5 rounded-lg border border-neutral-600/90 bg-neutral-900 px-2 text-[11px] font-medium text-neutral-100 shadow-sm';
-
   const popup = open
     ? createPortal(
         <div
           id="date-range-calendar-popup"
-          className="fixed z-[200] w-[210px] rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-neutral-100 shadow-2xl"
+          className={popupClass}
           style={{ top: popupPos.top, left: popupPos.left, transform: 'translateX(-50%)' }}
           role="dialog"
           aria-label="Date range calendar"
@@ -301,7 +338,7 @@ export function DateRangeCalendarFilter({
           <div className="mb-1.5 flex items-center justify-between">
             <button
               type="button"
-              className="inline-flex h-6 w-6 items-center justify-center rounded text-neutral-300 hover:bg-neutral-800 disabled:opacity-30"
+              className={navBtnClass}
               disabled={!canPrev}
               onClick={() => {
                 if (viewMonth === 0) {
@@ -316,7 +353,7 @@ export function DateRangeCalendarFilter({
             <p className="text-[11px] font-semibold tracking-tight">{monthLabel}</p>
             <button
               type="button"
-              className="inline-flex h-6 w-6 items-center justify-center rounded text-neutral-300 hover:bg-neutral-800"
+              className={navBtnClass}
               onClick={() => {
                 if (viewMonth === 11) {
                   setViewYear((y) => y + 1);
@@ -331,7 +368,7 @@ export function DateRangeCalendarFilter({
 
           <div className="mb-0.5 grid grid-cols-7 gap-px">
             {WEEKDAYS.map((d) => (
-              <div key={d} className="py-0.5 text-center text-[9px] font-medium text-neutral-500">
+              <div key={d} className={weekdayClass}>
                 {d}
               </div>
             ))}
@@ -355,7 +392,7 @@ export function DateRangeCalendarFilter({
                   onClick={() => onDayClick(day)}
                   className={[
                     'relative h-6 text-[10px] font-medium transition-colors',
-                    disabled ? 'cursor-not-allowed text-neutral-600' : 'text-neutral-200 hover:bg-neutral-800',
+                    disabled ? dayDisabledClass : dayIdleClass,
                     inRange ? 'bg-blue-600/35 text-white' : '',
                     isEndpoint ? 'bg-blue-600 text-white hover:bg-blue-500' : '',
                     isFrom && toDate ? 'rounded-l' : '',
@@ -370,7 +407,7 @@ export function DateRangeCalendarFilter({
             })}
           </div>
 
-          <p className="mt-1.5 text-[9px] text-neutral-500">
+          <p className={hintClass}>
             {picking === 'from' || !draftFrom
               ? 'Select start date'
               : draftTo
@@ -389,7 +426,7 @@ export function DateRangeCalendarFilter({
           <button
             type="button"
             onClick={openCalendar}
-            className="shrink-0 text-neutral-400 hover:text-neutral-200"
+            className={iconBtnClass}
             aria-label="Open from calendar"
             tabIndex={-1}
           >
@@ -407,7 +444,7 @@ export function DateRangeCalendarFilter({
             }}
             placeholder="From"
             aria-label="From date"
-            className="w-[4.6rem] bg-transparent text-[11px] font-medium text-neutral-100 placeholder:text-neutral-500 outline-none tabular-nums"
+            className={inputClass}
           />
         </label>
 
@@ -415,7 +452,7 @@ export function DateRangeCalendarFilter({
           <button
             type="button"
             onClick={openCalendar}
-            className="shrink-0 text-neutral-400 hover:text-neutral-200"
+            className={iconBtnClass}
             aria-label="Open to calendar"
             tabIndex={-1}
           >
@@ -433,7 +470,7 @@ export function DateRangeCalendarFilter({
             }}
             placeholder="To"
             aria-label="To date"
-            className="w-[4.6rem] bg-transparent text-[11px] font-medium text-neutral-100 placeholder:text-neutral-500 outline-none tabular-nums"
+            className={inputClass}
           />
         </label>
       </div>
