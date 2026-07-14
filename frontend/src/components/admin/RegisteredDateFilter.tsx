@@ -24,7 +24,7 @@ export function RegisteredDateFilter({ preset, from, to, onChange }: RegisteredD
   return (
     <div className="space-y-2">
       <select
-        className="input-field w-full"
+        className="filter-glass w-full"
         aria-label="Registered date preset"
         value={preset}
         onChange={(e) => {
@@ -53,14 +53,16 @@ export function RegisteredDateFilter({ preset, from, to, onChange }: RegisteredD
         <div className="grid grid-cols-2 gap-2">
           <input
             type="date"
-            className="input-field"
+            className="filter-glass"
+            style={{ backgroundImage: 'none', paddingRight: '0.875rem' }}
             aria-label="Registered from date"
             value={from}
             onChange={(e) => onChange({ preset: 'custom', from: e.target.value, to })}
           />
           <input
             type="date"
-            className="input-field"
+            className="filter-glass"
+            style={{ backgroundImage: 'none', paddingRight: '0.875rem' }}
             aria-label="Registered to date"
             value={to}
             onChange={(e) => onChange({ preset: 'custom', from, to: e.target.value })}

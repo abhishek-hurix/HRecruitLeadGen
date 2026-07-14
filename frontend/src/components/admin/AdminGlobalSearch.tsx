@@ -20,7 +20,11 @@ function hrefFor(result: FlatResult): string {
   return `/admin/candidates/${result.item.candidateId}?view=assessment`;
 }
 
-export function AdminGlobalSearch() {
+export function AdminGlobalSearch({
+  onQueryChange,
+}: {
+  onQueryChange?: (query: string) => void;
+} = {}) {
   const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -32,6 +36,10 @@ export function AdminGlobalSearch() {
     const t = window.setTimeout(() => setQuery(input.trim()), 300);
     return () => window.clearTimeout(t);
   }, [input]);
+
+  useEffect(() => {
+    onQueryChange?.(input);
+  }, [input, onQueryChange]);
 
   const enabled = query.length >= 2;
   const { data, isFetching, isError, refetch } = useQuery({
@@ -95,12 +103,12 @@ export function AdminGlobalSearch() {
   };
 
   return (
-    <div ref={rootRef} className="relative w-full max-w-md">
+    <div ref={rootRef} className="relative w-full">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-hurix-gray" size={16} />
         <input
           className="input-field pl-9 pr-8 text-sm py-2"
-          placeholder="Search candidates, roles, assessments…"
+          placeholder="Search by name, email, roles, assessments…"
           value={input}
           aria-label="Global admin search"
           aria-expanded={open}

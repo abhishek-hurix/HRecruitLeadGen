@@ -6,6 +6,7 @@ import type {
   ExportFormat,
   ExportScope,
   ReminderTemplate,
+  WhatsAppTemplate,
   SelectionPayload,
   DeletedCandidateRow,
   PaginationMeta,
@@ -15,6 +16,7 @@ export type {
   SelectionPayload,
   BulkResult,
   ReminderTemplate,
+  WhatsAppTemplate,
   ExportScope,
   ExportFormat,
   DeletedCandidateRow,
@@ -58,12 +60,14 @@ export async function getCandidates(params: {
   datePreset?: string;
   ownerId?: string;
   inactivityDays?: number;
-  minScore?: number;
+  minScore?: number | 'na';
   sortBy?: string;
   sortOrder?: string;
   page?: number;
   limit?: number;
   pageSize?: number;
+  isTestUser?: boolean;
+  creationSource?: 'ADMIN_CREATED' | 'SELF_REGISTERED';
 }) {
   const { data } = await api.get('/admin/candidates', {
     params: {
@@ -71,6 +75,7 @@ export async function getCandidates(params: {
       countryCodes: params.countryCodes?.length ? params.countryCodes.join(',') : undefined,
       pageSize: params.pageSize || params.limit,
       limit: params.pageSize || params.limit,
+      isTestUser: params.isTestUser === undefined ? undefined : params.isTestUser ? 'true' : 'false',
     },
   });
   return data as {
@@ -164,6 +169,11 @@ export async function bulkReject(selection: SelectionPayload, reason: string) {
   return data as BulkResult;
 }
 
+export async function bulkShortlist(selection: SelectionPayload) {
+  const { data } = await api.post('/admin/candidates/bulk/shortlist', { selection });
+  return data as BulkResult;
+}
+
 export async function bulkAssignRole(selection: SelectionPayload, jobRoleId: string) {
   const { data } = await api.post('/admin/candidates/bulk/assign-role', { selection, jobRoleId });
   return data as BulkResult;
@@ -171,6 +181,36 @@ export async function bulkAssignRole(selection: SelectionPayload, jobRoleId: str
 
 export async function bulkSoftDelete(selection: SelectionPayload) {
   const { data } = await api.post('/admin/candidates/bulk/delete', { selection });
+  return data as BulkResult;
+}
+
+export async function bulkRestoreDeleted(selection: SelectionPayload) {
+  const { data } = await api.post('/admin/deleted-candidates/bulk/restore', { selection });
+  return data as BulkResult;
+}
+
+export async function bulkRestoreRejected(selection: SelectionPayload) {
+  const { data } = await api.post('/admin/candidates/bulk/restore-rejected', { selection });
+  return data as BulkResult;
+}
+
+export async function bulkRestoreShortlisted(selection: SelectionPayload) {
+  const { data } = await api.post('/admin/candidates/bulk/restore-shortlisted', { selection });
+  return data as BulkResult;
+}
+
+export async function bulkMarkTestUsers(selection: SelectionPayload) {
+  const { data } = await api.post('/admin/candidates/bulk/mark-test-users', { selection });
+  return data as BulkResult;
+}
+
+export async function bulkRemoveTestUsers(selection: SelectionPayload) {
+  const { data } = await api.post('/admin/candidates/bulk/remove-test-users', { selection });
+  return data as BulkResult;
+}
+
+export async function bulkPermanentDelete(selection: SelectionPayload) {
+  const { data } = await api.post('/admin/deleted-candidates/bulk/permanent', { selection });
   return data as BulkResult;
 }
 
@@ -189,9 +229,54 @@ export async function getReminderTemplates() {
   return data.data as ReminderTemplate[];
 }
 
+export async function createReminderTemplate(payload: {
+  name: string;
+  subject: string;
+  bodyHtml: string;
+}) {
+  const { data } = await api.post('/admin/reminder-templates', payload);
+  return data.data as ReminderTemplate;
+}
+
+export async function updateReminderTemplate(
+  id: string,
+  payload: { name: string; subject: string; bodyHtml: string }
+) {
+  const { data } = await api.put(`/admin/reminder-templates/${id}`, payload);
+  return data.data as ReminderTemplate;
+}
+
+export async function deleteReminderTemplate(id: string) {
+  const { data } = await api.delete(`/admin/reminder-templates/${id}`);
+  return data;
+}
+
 export async function previewReminderTemplate(templateId: string) {
   const { data } = await api.post('/admin/reminder-templates/preview', { templateId });
   return data.data as { subject: string; bodyHtml: string };
+}
+
+export async function getWhatsAppTemplates() {
+  const { data } = await api.get('/admin/whatsapp-templates');
+  return data.data as WhatsAppTemplate[];
+}
+
+export async function createWhatsAppTemplate(payload: { name: string; bodyText: string }) {
+  const { data } = await api.post('/admin/whatsapp-templates', payload);
+  return data.data as WhatsAppTemplate;
+}
+
+export async function updateWhatsAppTemplate(
+  id: string,
+  payload: { name: string; bodyText: string }
+) {
+  const { data } = await api.put(`/admin/whatsapp-templates/${id}`, payload);
+  return data.data as WhatsAppTemplate;
+}
+
+export async function deleteWhatsAppTemplate(id: string) {
+  const { data } = await api.delete(`/admin/whatsapp-templates/${id}`);
+  return data;
 }
 
 export async function getCalendarStatus() {
@@ -205,18 +290,53 @@ export async function exportCandidatesAdvanced(payload: {
   selection?: SelectionPayload;
   filters?: Record<string, unknown>;
 }) {
-  const { data } = await api.post('/admin/candidates/export', payload, { responseType: 'blob' });
-  const ext = payload.format;
-  const date = new Date().toISOString().slice(0, 10);
-  const url = window.URL.createObjectURL(new Blob([data]));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `candidates-${payload.scope.toLowerCase()}-${date}.${ext}`;
-  link.click();
-  window.URL.revokeObjectURL(url);
+  try {
+    const response = await api.post('/admin/candidates/export', payload, { responseType: 'blob' });
+    const contentType = String(response.headers['content-type'] || '');
+    if (contentType.includes('application/json')) {
+      const text = await (response.data as Blob).text();
+      const json = JSON.parse(text) as { message?: string; error?: string };
+      throw Object.assign(new Error(json.message || json.error || 'Export failed'), {
+        response: { status: response.status, data: json },
+      });
+    }
+    const ext = payload.format;
+    const date = new Date().toISOString().slice(0, 10);
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `candidates-${payload.scope.toLowerCase()}-${date}.${ext}`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    const data = (err as { response?: { data?: unknown } })?.response?.data;
+    if (typeof Blob !== 'undefined' && data instanceof Blob) {
+      try {
+        const text = await data.text();
+        const json = JSON.parse(text) as { message?: string; error?: string };
+        throw Object.assign(new Error(json.message || json.error || 'Export failed'), {
+          response: {
+            status: (err as { response?: { status?: number } }).response?.status,
+            data: json,
+          },
+        });
+      } catch (parsed) {
+        if (parsed !== err && (parsed as Error).message) throw parsed;
+      }
+    }
+    throw err;
+  }
 }
 
-export async function getDeletedCandidates(params: { search?: string; page?: number; pageSize?: number }) {
+export async function getDeletedCandidates(params: {
+  search?: string;
+  role?: string;
+  registeredFrom?: string;
+  registeredTo?: string;
+  datePreset?: string;
+  page?: number;
+  pageSize?: number;
+}) {
   const { data } = await api.get('/admin/deleted-candidates', { params });
   return data as {
     success: boolean;

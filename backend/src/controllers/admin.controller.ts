@@ -59,10 +59,13 @@ export async function getCandidates(req: AuthRequest, res: Response, next: NextF
       ownerId: parsed.ownerId,
       inactivityDays: parsed.inactivityDays,
       minScore: parsed.minScore ?? undefined,
+      isTestUser: parsed.isTestUser,
+      creationSource: parsed.creationSource,
       sortBy: parsed.sortBy,
       sortOrder: parsed.sortOrder,
       page: parsed.page,
       pageSize: parsed.pageSize,
+      viewerRole: req.adminRole,
     });
     res.json(result);
   } catch (error) {

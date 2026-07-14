@@ -1,52 +1,83 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import Lottie from 'lottie-react';
 import {
   getReminderTemplates,
   previewReminderTemplate,
   getJobRoles,
   getCalendarStatus,
+  getWhatsAppTemplates,
 } from '../../api/admin';
 import { getAdminActionErrorMessage } from '../../utils/apiErrors';
-import type { ExportFormat, ExportScope } from '../../types/candidate-management';
+import type { BulkResult, ExportFormat, ExportScope, WhatsAppTemplate } from '../../types/candidate-management';
+import emailSentAnimation from '../../assets/email-sent.json';
+import {
+  buildWhatsAppUrl,
+  candidateWhatsAppVars,
+  fillWhatsAppTemplate,
+} from '../../utils/whatsapp';
+import {
+  GlassModal,
+  glassBtnSecondaryClass,
+  glassBtnPrimaryClass,
+  glassBtnDangerClass,
+  glassFieldClass,
+} from '../ui/GlassDialog';
 
-interface BaseModalProps {
+function ModalShell({
+  title,
+  count,
+  onClose,
+  children,
+  closeDisabled,
+}: {
   title: string;
   count: number;
   onClose: () => void;
   children: React.ReactNode;
+  closeDisabled?: boolean;
+}) {
+  return (
+    <GlassModal
+      title={title}
+      subtitle={`Affects ${count} candidate${count === 1 ? '' : 's'}`}
+      onClose={onClose}
+      closeDisabled={closeDisabled}
+    >
+      {children}
+    </GlassModal>
+  );
 }
 
-function ModalShell({ title, count, onClose, children }: BaseModalProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    const focusable = panelRef.current?.querySelector<HTMLElement>('button, [href], input, select, textarea');
-    focusable?.focus();
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      previous?.focus?.();
-    };
-  }, [onClose]);
-
+function ModalActions({
+  onClose,
+  loading,
+  onConfirm,
+  confirmLabel,
+  confirmLoadingLabel,
+  disabled,
+  danger,
+}: {
+  onClose: () => void;
+  loading: boolean;
+  onConfirm: () => void;
+  confirmLabel: string;
+  confirmLoadingLabel: string;
+  disabled?: boolean;
+  danger?: boolean;
+}) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-      <div ref={panelRef} className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-bold text-hurix-charcoal">{title}</h2>
-            <p className="text-xs text-hurix-gray mt-1">Affects {count} candidate{count === 1 ? '' : 's'}</p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-hurix-gray hover:text-hurix-charcoal">
-            <X size={20} />
-          </button>
-        </div>
-        {children}
-      </div>
+    <div className="flex flex-wrap justify-center gap-3 pt-2">
+      <button type="button" onClick={onClose} disabled={loading} className={glassBtnSecondaryClass}>
+        Cancel
+      </button>
+      <button
+        type="button"
+        onClick={onConfirm}
+        disabled={loading || disabled}
+        className={danger ? glassBtnDangerClass : glassBtnPrimaryClass}
+      >
+        {loading ? confirmLoadingLabel : confirmLabel}
+      </button>
     </div>
   );
 }
@@ -65,37 +96,39 @@ export function StatusChangeModal({
   const [error, setError] = useState<string | null>(null);
   return (
     <ModalShell title="Change Journey Status" count={count} onClose={onClose}>
-      <select className="input-field w-full mb-4" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="New journey status">
+      <select
+        className={`${glassFieldClass} mb-4`}
+        style={{ backgroundImage: 'none', paddingRight: '0.875rem' }}
+        value={status}
+        onChange={(e) => setStatus(e.target.value)}
+        aria-label="New journey status"
+      >
         {['REGISTERED', 'EMAIL_SENT', 'VERIFIED', 'STARTED', 'SUBMITTED', 'EXPIRED'].map((s) => (
           <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
         ))}
       </select>
       {count >= 50 && (
-        <p className="text-xs text-amber-700 mb-3">Warning: this will update a large number of candidates.</p>
+        <p className="mb-3 text-center text-xs text-amber-700">Warning: this will update a large number of candidates.</p>
       )}
-      {error && <p className="text-sm text-red-600 mb-3" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2">
-        <button type="button" className="btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={loading}
-          onClick={async () => {
-            setLoading(true);
-            setError(null);
-            try {
-              await onConfirm(status);
-              onClose();
-            } catch (e) {
-              setError(getAdminActionErrorMessage(e));
-            } finally {
-              setLoading(false);
-            }
-          }}
-        >
-          {loading ? 'Saving...' : 'Confirm'}
-        </button>
-      </div>
+      {error && <p className="mb-3 text-center text-sm text-red-600" role="alert">{error}</p>}
+      <ModalActions
+        onClose={onClose}
+        loading={loading}
+        confirmLabel="Confirm"
+        confirmLoadingLabel="Saving..."
+        onConfirm={async () => {
+          setLoading(true);
+          setError(null);
+          try {
+            await onConfirm(status);
+            onClose();
+          } catch (e) {
+            setError(getAdminActionErrorMessage(e));
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
     </ModalShell>
   );
 }
@@ -116,11 +149,12 @@ export function RejectModal({
   const tooLong = reason.trim().length > 2000;
   return (
     <ModalShell title="Reject Candidates" count={count} onClose={onClose}>
-      <p className="text-sm text-hurix-gray mb-2">
+      <p className="mb-2 text-sm text-neutral-600">
         Rejection reason is internal and visible only to Super Admins. It will not be shown on ordinary Admin screens.
       </p>
       <textarea
-        className="input-field w-full min-h-[100px] mb-2"
+        className={`${glassFieldClass} mb-2 min-h-[100px]`}
+        style={{ backgroundImage: 'none', paddingRight: '0.875rem' }}
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Enter internal rejection reason..."
@@ -128,33 +162,31 @@ export function RejectModal({
         maxLength={2000}
       />
       {(tooShort || tooLong) && (
-        <p className="text-xs text-red-600 mb-2" role="alert">
+        <p className="mb-2 text-center text-xs text-red-600" role="alert">
           {tooShort ? 'Reason must be at least 3 characters.' : 'Reason must be 2000 characters or fewer.'}
         </p>
       )}
-      {error && <p className="text-sm text-red-600 mb-3" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2">
-        <button type="button" className="btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
-        <button
-          type="button"
-          className="btn-primary bg-red-600 hover:bg-red-700"
-          disabled={loading || reason.trim().length < 3 || tooLong}
-          onClick={async () => {
-            setLoading(true);
-            setError(null);
-            try {
-              await onConfirm(reason.trim());
-              onClose();
-            } catch (e) {
-              setError(getAdminActionErrorMessage(e));
-            } finally {
-              setLoading(false);
-            }
-          }}
-        >
-          {loading ? 'Rejecting...' : 'Confirm Reject'}
-        </button>
-      </div>
+      {error && <p className="mb-3 text-center text-sm text-red-600" role="alert">{error}</p>}
+      <ModalActions
+        onClose={onClose}
+        loading={loading}
+        danger
+        disabled={reason.trim().length < 3 || tooLong}
+        confirmLabel="Confirm Reject"
+        confirmLoadingLabel="Rejecting..."
+        onConfirm={async () => {
+          setLoading(true);
+          setError(null);
+          try {
+            await onConfirm(reason.trim());
+            onClose();
+          } catch (e) {
+            setError(getAdminActionErrorMessage(e));
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
     </ModalShell>
   );
 }
@@ -187,34 +219,44 @@ export function AssignRoleModal({
 
   return (
     <ModalShell title="Assign Job Role" count={count} onClose={onClose}>
-      <input
-        className="input-field w-full mb-2"
-        placeholder="Search roles..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        aria-label="Search job roles"
-      />
-      <select
-        className="input-field w-full mb-2"
-        value={roleId}
-        onChange={(e) => setRoleId(e.target.value)}
-        aria-label="Job role"
-      >
-        {filtered.map((r) => (
-          <option key={r.id} value={r.id}>{r.title}</option>
-        ))}
-      </select>
-      {selectedTitle && (
-        <p className="text-xs text-hurix-gray mb-3">Selected role: <strong>{selectedTitle}</strong></p>
-      )}
-      {error && <p className="text-sm text-red-600 mb-3" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2">
-        <button type="button" className="btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={loading || !roleId}
-          onClick={async () => {
+      <div className="space-y-3">
+        <input
+          className="filter-glass w-full"
+          style={{ backgroundImage: 'none', paddingRight: '0.875rem' }}
+          placeholder="Search roles..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search job roles"
+        />
+        <select
+          className="filter-glass w-full"
+          value={roleId}
+          onChange={(e) => setRoleId(e.target.value)}
+          aria-label="Job role"
+        >
+          {filtered.length === 0 ? (
+            <option value="">No roles found</option>
+          ) : (
+            filtered.map((r) => (
+              <option key={r.id} value={r.id}>{r.title}</option>
+            ))
+          )}
+        </select>
+        {selectedTitle && (
+          <p className="text-xs text-neutral-500">
+            Selected role: <span className="font-semibold text-neutral-900">{selectedTitle}</span>
+          </p>
+        )}
+        {error && (
+          <p className="text-center text-sm text-red-600" role="alert">{error}</p>
+        )}
+        <ModalActions
+          onClose={onClose}
+          loading={loading}
+          disabled={!roleId}
+          confirmLabel="Confirm"
+          confirmLoadingLabel="Assigning…"
+          onConfirm={async () => {
             setLoading(true);
             setError(null);
             try {
@@ -226,9 +268,7 @@ export function AssignRoleModal({
               setLoading(false);
             }
           }}
-        >
-          {loading ? 'Assigning...' : 'Confirm'}
-        </button>
+        />
       </div>
     </ModalShell>
   );
@@ -239,22 +279,19 @@ export function ReminderModal({
   onClose,
   onConfirm,
   onRetryFailed,
-  lastResult,
 }: {
   count: number;
   onClose: () => void;
-  onConfirm: (templateId: string) => Promise<void>;
-  onRetryFailed?: (templateId: string, failedIds: string[]) => Promise<void>;
-  lastResult?: {
-    summary: { requested: number; succeeded: number; failed: number; skipped: number };
-    failedCandidateIds?: string[];
-  } | null;
+  onConfirm: (templateId: string) => Promise<BulkResult | void>;
+  onRetryFailed?: (templateId: string, failedIds: string[]) => Promise<BulkResult | void>;
 }) {
   const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
   const [templateId, setTemplateId] = useState('');
   const [preview, setPreview] = useState<{ subject: string; bodyHtml: string } | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<'form' | 'sending' | 'done'>('form');
+  const [result, setResult] = useState<BulkResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showLogs, setShowLogs] = useState(false);
 
   useEffect(() => {
     getReminderTemplates().then((list) => {
@@ -268,72 +305,278 @@ export function ReminderModal({
     previewReminderTemplate(templateId).then(setPreview).catch(() => setPreview(null));
   }, [templateId]);
 
+  const stats = useMemo(() => {
+    if (!result) return null;
+    const email = result.email;
+    return {
+      sent: email?.sent ?? result.summary.succeeded,
+      failed: email?.failed ?? result.summary.failed,
+      skipped: email?.skipped ?? result.summary.skipped,
+      total: result.summary.requested,
+    };
+  }, [result]);
+
+  const hasIssues = Boolean(stats && (stats.failed > 0 || stats.skipped > 0));
+
+  useEffect(() => {
+    if (phase !== 'done' || !stats || hasIssues) return;
+    const timer = window.setTimeout(() => onClose(), 3500);
+    return () => window.clearTimeout(timer);
+  }, [phase, stats, hasIssues, onClose]);
+
+  const runSend = async () => {
+    if (!templateId) return;
+    setPhase('sending');
+    setError(null);
+    setShowLogs(false);
+    setResult(null);
+    try {
+      const next = await onConfirm(templateId);
+      if (next) setResult(next);
+      setPhase('done');
+    } catch (e) {
+      setError(getAdminActionErrorMessage(e));
+      setPhase('form');
+    }
+  };
+
+  const showingProgress = phase === 'sending' || phase === 'done';
+
   return (
-    <ModalShell title="Send Reminder Email" count={count} onClose={onClose}>
-      <select
-        className="input-field w-full mb-3"
-        value={templateId}
-        onChange={(e) => setTemplateId(e.target.value)}
-        aria-label="Reminder template"
-      >
-        {templates.map((t) => (
-          <option key={t.id} value={t.id}>{t.name}</option>
-        ))}
-      </select>
-      {preview && (
-        <div className="mb-4 rounded-lg border border-slate-200 p-3 bg-slate-50">
-          <p className="text-xs font-semibold mb-1">Preview subject</p>
-          <p className="text-sm mb-2">{preview.subject}</p>
-          <div className="text-xs text-hurix-gray" dangerouslySetInnerHTML={{ __html: preview.bodyHtml }} />
-        </div>
-      )}
-      {lastResult && (
-        <p className="text-sm text-hurix-charcoal mb-3" role="status">
-          Sent {lastResult.summary.succeeded}, failed {lastResult.summary.failed}, skipped {lastResult.summary.skipped}
-          (of {lastResult.summary.requested}).
+    <ModalShell
+      title="Send Reminder Email"
+      count={count}
+      onClose={onClose}
+      closeDisabled={phase === 'sending'}
+    >
+      <div className="space-y-3">
+        {!showingProgress && (
+          <>
+            <select
+              className="filter-glass w-full"
+              value={templateId}
+              onChange={(e) => setTemplateId(e.target.value)}
+              aria-label="Reminder template"
+            >
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+            {preview && (
+              <div className="rounded-xl border border-white/70 bg-white/55 p-3 shadow-sm backdrop-blur-md">
+                <p className="mb-1 text-xs font-semibold text-neutral-700">Preview subject</p>
+                <p className="mb-2 text-sm font-medium text-neutral-950">{preview.subject}</p>
+                <div
+                  className="text-xs leading-relaxed text-neutral-600 [&_strong]:font-semibold [&_strong]:text-neutral-900"
+                  dangerouslySetInnerHTML={{ __html: preview.bodyHtml }}
+                />
+              </div>
+            )}
+          </>
+        )}
+
+        {showingProgress && (
+          <div className="relative flex flex-col items-center gap-2 py-2" role="status" aria-live="polite">
+            {phase === 'done' && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="absolute right-0 top-0 inline-flex h-6 w-6 items-center justify-center rounded text-lg leading-none text-neutral-400 hover:bg-neutral-100 hover:text-neutral-800"
+                aria-label="Close"
+                title="Close"
+              >
+                ×
+              </button>
+            )}
+            <Lottie
+              animationData={emailSentAnimation}
+              loop={phase === 'sending'}
+              className="h-36 w-36"
+            />
+            {phase === 'sending' && (
+              <p className="text-sm font-medium text-neutral-700">Sending...</p>
+            )}
+            {stats && (
+              <p className="text-center text-sm text-neutral-700">
+                Sent {stats.sent}, failed {stats.failed}, skipped {stats.skipped} (of {stats.total}).
+              </p>
+            )}
+            {showLogs && result?.errors?.length ? (
+              <ul className="mt-1 max-h-40 w-full overflow-y-auto rounded-lg border border-red-100 bg-red-50/80 px-3 py-2 text-left text-xs text-red-700">
+                {result.errors.map((err, idx) => (
+                  <li key={`${err.candidateId || 'err'}-${idx}`} className="py-0.5">
+                    {err.message}
+                    {err.candidateId ? ` (${err.candidateId.slice(0, 8)})` : ''}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {showLogs && (!result?.errors || result.errors.length === 0) && (
+              <p className="text-center text-xs text-neutral-500">
+                No detailed error logs were returned for this send.
+              </p>
+            )}
+          </div>
+        )}
+
+        {error && (
+          <p className="text-center text-sm text-red-600" role="alert">{error}</p>
+        )}
+
+        {phase === 'form' && (
+          <div className="flex flex-wrap justify-center gap-3 pt-2">
+            <button type="button" onClick={onClose} className={glassBtnSecondaryClass}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!templateId}
+              onClick={runSend}
+              className={glassBtnPrimaryClass}
+            >
+              Send Reminder
+            </button>
+          </div>
+        )}
+
+        {phase === 'done' && hasIssues && (
+          <div className="flex flex-wrap justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowLogs((v) => !v)}
+              className={glassBtnSecondaryClass}
+            >
+              {showLogs ? 'Hide Logs' : 'Check Logs'}
+            </button>
+            {result?.failedCandidateIds && result.failedCandidateIds.length > 0 && onRetryFailed && (
+              <button
+                type="button"
+                disabled={!templateId}
+                onClick={async () => {
+                  setPhase('sending');
+                  setError(null);
+                  setShowLogs(false);
+                  try {
+                    const next = await onRetryFailed(templateId, result.failedCandidateIds!);
+                    if (next) setResult(next);
+                    setPhase('done');
+                  } catch (e) {
+                    setError(getAdminActionErrorMessage(e));
+                    setPhase('done');
+                  }
+                }}
+                className={glassBtnPrimaryClass}
+              >
+                Retry failed
+              </button>
+            )}
+            <button type="button" onClick={onClose} className={glassBtnSecondaryClass}>
+              Close
+            </button>
+          </div>
+        )}
+      </div>
+    </ModalShell>
+  );
+}
+
+export function WhatsAppSendModal({
+  candidate,
+  onClose,
+}: {
+  candidate: {
+    id: string;
+    fullName: string;
+    phone?: string | null;
+    applicationId?: string | null;
+    roleLabel?: string | null;
+    appliedRole?: string | null;
+    assessmentStatus?: string | null;
+  };
+  onClose: () => void;
+}) {
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [templateId, setTemplateId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getWhatsAppTemplates()
+      .then((list) => {
+        if (cancelled) return;
+        setTemplates(list);
+        if (list[0]) setTemplateId(list[0].id);
+      })
+      .catch((e) => {
+        if (!cancelled) setLoadError(getAdminActionErrorMessage(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selected = templates.find((t) => t.id === templateId) || null;
+  const vars = useMemo(() => candidateWhatsAppVars(candidate), [candidate]);
+  const message = selected ? fillWhatsAppTemplate(selected.bodyText, vars) : '';
+  const waUrl = buildWhatsAppUrl(candidate.phone || '', message);
+
+  return (
+    <ModalShell title="Send WhatsApp Message" count={1} onClose={onClose}>
+      <div className="space-y-3">
+        <p className="text-sm text-neutral-600">
+          To <span className="font-medium text-neutral-950">{candidate.fullName}</span>
+          {candidate.phone ? ` · ${candidate.phone}` : ''}
         </p>
-      )}
-      {error && <p className="text-sm text-red-600 mb-3" role="alert">{error}</p>}
-      <div className="flex flex-wrap justify-end gap-2">
-        <button type="button" className="btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
-        {lastResult?.failedCandidateIds && lastResult.failedCandidateIds.length > 0 && onRetryFailed && (
-          <button
-            type="button"
-            className="btn-secondary"
-            disabled={loading || !templateId}
-            onClick={async () => {
-              setLoading(true);
-              setError(null);
-              try {
-                await onRetryFailed(templateId, lastResult.failedCandidateIds!);
-              } catch (e) {
-                setError(getAdminActionErrorMessage(e));
-              } finally {
-                setLoading(false);
-              }
+
+        {loading ? (
+          <p className="text-sm text-neutral-500">Loading templates...</p>
+        ) : loadError ? (
+          <p className="text-center text-sm text-red-600" role="alert">{loadError}</p>
+        ) : templates.length === 0 ? (
+          <p className="text-sm text-neutral-600">
+            No WhatsApp templates yet. Add one under Templates first.
+          </p>
+        ) : (
+          <>
+            <select
+              className="filter-glass w-full"
+              value={templateId}
+              onChange={(e) => setTemplateId(e.target.value)}
+              aria-label="WhatsApp template"
+            >
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+            <div className="rounded-xl border border-white/70 bg-white/55 p-3 shadow-sm backdrop-blur-md">
+              <p className="mb-1 text-xs font-semibold text-neutral-700">Message preview</p>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-800">{message}</p>
+            </div>
+          </>
+        )}
+
+        <div className="flex flex-wrap justify-center gap-3 pt-2">
+          <button type="button" onClick={onClose} className={glassBtnSecondaryClass}>
+            Cancel
+          </button>
+          <a
+            href={waUrl || undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${glassBtnPrimaryClass} ${!waUrl || !message.trim() ? 'pointer-events-none opacity-50' : ''}`}
+            aria-disabled={!waUrl || !message.trim()}
+            onClick={() => {
+              if (waUrl && message.trim()) onClose();
             }}
           >
-            Retry failed
-          </button>
-        )}
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={loading || !templateId}
-          onClick={async () => {
-            setLoading(true);
-            setError(null);
-            try {
-              await onConfirm(templateId);
-            } catch (e) {
-              setError(getAdminActionErrorMessage(e));
-            } finally {
-              setLoading(false);
-            }
-          }}
-        >
-          {loading ? 'Sending...' : 'Send Reminder'}
-        </button>
+            Open WhatsApp
+          </a>
+        </div>
       </div>
     </ModalShell>
   );
@@ -352,36 +595,111 @@ export function DeleteConfirmModal({
   const [error, setError] = useState<string | null>(null);
   return (
     <ModalShell title="Soft Delete Candidates" count={count} onClose={onClose}>
-      <p className="text-sm text-hurix-gray mb-2">
+      <p className="mb-2 text-sm text-neutral-600">
         Candidates will be moved to Deleted Candidates and removed from active lists, analytics, and exports.
         This is a soft delete — Super Admins can restore them later.
       </p>
-      <p className="text-xs text-hurix-gray mb-4">
+      <p className="mb-4 text-xs text-neutral-500">
         This is not permanent deletion. Permanent delete is available only on the Deleted Candidates page for Super Admins.
       </p>
-      {error && <p className="text-sm text-red-600 mb-3" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2">
-        <button type="button" className="btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
-        <button
-          type="button"
-          className="btn-primary bg-red-600 hover:bg-red-700"
-          disabled={loading}
-          onClick={async () => {
-            setLoading(true);
-            setError(null);
-            try {
-              await onConfirm();
-              onClose();
-            } catch (e) {
-              setError(getAdminActionErrorMessage(e));
-            } finally {
-              setLoading(false);
-            }
-          }}
-        >
-          {loading ? 'Deleting...' : 'Confirm Delete'}
-        </button>
-      </div>
+      {error && <p className="mb-3 text-center text-sm text-red-600" role="alert">{error}</p>}
+      <ModalActions
+        onClose={onClose}
+        loading={loading}
+        danger
+        confirmLabel="Confirm Delete"
+        confirmLoadingLabel="Deleting..."
+        onConfirm={async () => {
+          setLoading(true);
+          setError(null);
+          try {
+            await onConfirm();
+            onClose();
+          } catch (e) {
+            setError(getAdminActionErrorMessage(e));
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
+    </ModalShell>
+  );
+}
+
+export function MarkTestUsersModal({
+  count,
+  onClose,
+  onConfirm,
+}: {
+  count: number;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <ModalShell title="Move to Test Users" count={count} onClose={onClose}>
+      <p className="mb-4 text-sm text-neutral-600">
+        Selected candidates will be moved to the Test Users list and hidden from the main Candidates table.
+      </p>
+      {error && <p className="mb-3 text-center text-sm text-red-600" role="alert">{error}</p>}
+      <ModalActions
+        onClose={onClose}
+        loading={loading}
+        confirmLabel="Confirm"
+        confirmLoadingLabel="Moving..."
+        onConfirm={async () => {
+          setLoading(true);
+          setError(null);
+          try {
+            await onConfirm();
+            onClose();
+          } catch (e) {
+            setError(getAdminActionErrorMessage(e));
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
+    </ModalShell>
+  );
+}
+
+export function ShortlistModal({
+  count,
+  onClose,
+  onConfirm,
+}: {
+  count: number;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <ModalShell title="Shortlist Candidates" count={count} onClose={onClose}>
+      <p className="mb-4 text-sm text-neutral-600">
+        Selected candidates will move to Shortlisted Candidates and leave the main Candidates list.
+      </p>
+      {error && <p className="mb-3 text-center text-sm text-red-600" role="alert">{error}</p>}
+      <ModalActions
+        onClose={onClose}
+        loading={loading}
+        confirmLabel="Confirm Shortlist"
+        confirmLoadingLabel="Shortlisting..."
+        onConfirm={async () => {
+          setLoading(true);
+          setError(null);
+          try {
+            await onConfirm();
+            onClose();
+          } catch (e) {
+            setError(getAdminActionErrorMessage(e));
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
     </ModalShell>
   );
 }
@@ -397,15 +715,19 @@ export function SelectAllConfirmModal({
 }) {
   return (
     <ModalShell title="Select All Matching Candidates" count={total} onClose={onClose}>
-      <p className="text-sm text-hurix-gray mb-4">
+      <p className="mb-4 text-sm text-neutral-600">
         Select all <strong>{total}</strong> candidates matching the current filters?
       </p>
-      <div className="flex justify-end gap-2">
-        <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-        <button type="button" className="btn-primary" onClick={() => { onConfirm(); onClose(); }}>
-          Confirm Select All
-        </button>
-      </div>
+      <ModalActions
+        onClose={onClose}
+        loading={false}
+        confirmLabel="Confirm Select All"
+        confirmLoadingLabel="Working..."
+        onConfirm={() => {
+          onConfirm();
+          onClose();
+        }}
+      />
     </ModalShell>
   );
 }
@@ -463,34 +785,35 @@ export function InterviewModal({
 
   return (
     <ModalShell title="Schedule Interview" count={count} onClose={onClose}>
-      <p className="text-xs text-hurix-gray mb-3">{calendarHint}</p>
+      <p className="mb-3 text-xs text-neutral-500">{calendarHint}</p>
       {!calendarConnected && (
-        <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3" role="status">
+        <div className="mb-3 rounded-xl border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-sm text-amber-900 backdrop-blur-md" role="status">
           <p className="mb-2">
             Google Calendar is not connected. Connect Calendar before live scheduling. OAuth tokens are never exposed in the browser.
           </p>
-          <a href="/admin/settings" className="inline-flex text-sm font-medium text-hurix-blue underline">
+          <a href="/admin/settings" className="inline-flex text-sm font-medium text-neutral-950 underline">
             Connect Google Calendar
           </a>
         </div>
       )}
-      <input className="input-field w-full mb-2" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Interview title" aria-label="Interview title" />
-      <div className="grid grid-cols-2 gap-2 mb-2">
-        <input type="date" className="input-field" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Interview date" />
-        <input type="time" className="input-field" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Start time" />
+      <input className={`${glassFieldClass} mb-2`} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Interview title" aria-label="Interview title" />
+      <div className="mb-2 grid grid-cols-2 gap-2">
+        <input type="date" className={glassFieldClass} value={date} onChange={(e) => setDate(e.target.value)} aria-label="Interview date" />
+        <input type="time" className={glassFieldClass} value={time} onChange={(e) => setTime(e.target.value)} aria-label="Start time" />
       </div>
-      <input className="input-field w-full mb-2" value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Timezone" aria-label="Timezone" />
-      <div className="grid grid-cols-2 gap-2 mb-2">
-        <label className="text-xs">Duration (min)
-          <input type="number" min={15} className="input-field w-full" value={durationMinutes} onChange={(e) => setDurationMinutes(Number(e.target.value))} />
+      <input className={`${glassFieldClass} mb-2`} value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Timezone" aria-label="Timezone" />
+      <div className="mb-2 grid grid-cols-2 gap-2">
+        <label className="text-xs text-neutral-600">Duration (min)
+          <input type="number" min={15} className={`${glassFieldClass} mt-1`} value={durationMinutes} onChange={(e) => setDurationMinutes(Number(e.target.value))} />
         </label>
-        <label className="text-xs">Gap (min)
-          <input type="number" min={0} className="input-field w-full" value={gapMinutes} onChange={(e) => setGapMinutes(Number(e.target.value))} disabled={mode !== 'SEQUENTIAL'} />
+        <label className="text-xs text-neutral-600">Gap (min)
+          <input type="number" min={0} className={`${glassFieldClass} mt-1`} value={gapMinutes} onChange={(e) => setGapMinutes(Number(e.target.value))} disabled={mode !== 'SEQUENTIAL'} />
         </label>
       </div>
       {count > 1 && (
         <select
-          className="input-field w-full mb-2"
+          className={`${glassFieldClass} mb-2`}
+          style={{ backgroundImage: 'none', paddingRight: '0.875rem' }}
           value={mode}
           onChange={(e) => setMode(e.target.value as 'GROUP' | 'SEQUENTIAL')}
           aria-label="Interview mode"
@@ -500,9 +823,9 @@ export function InterviewModal({
         </select>
       )}
       {slotPreview.length > 0 && (
-        <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs font-semibold mb-1">Sequential schedule preview</p>
-          <ul className="text-xs text-hurix-gray space-y-1">
+        <div className="mb-3 rounded-xl border border-white/70 bg-white/60 p-3 backdrop-blur-md">
+          <p className="mb-1 text-xs font-semibold text-neutral-900">Sequential schedule preview</p>
+          <ul className="space-y-1 text-xs text-neutral-600">
             {slotPreview.map((s) => (
               <li key={s}>{s}</li>
             ))}
@@ -510,55 +833,52 @@ export function InterviewModal({
         </div>
       )}
       <input
-        className="input-field w-full mb-2"
+        className={`${glassFieldClass} mb-2`}
         value={interviewers}
         onChange={(e) => setInterviewers(e.target.value)}
         placeholder="Interviewer emails (comma-separated)"
         aria-label="Interviewer emails"
       />
-      <label className="flex items-center gap-2 text-sm text-hurix-charcoal mb-2">
+      <label className="mb-2 flex items-center gap-2 text-sm text-neutral-800">
         <input type="checkbox" checked={createMeet} onChange={(e) => setCreateMeet(e.target.checked)} />
         Create Google Meet link
       </label>
-      <textarea className="input-field w-full mb-4 min-h-[80px]" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
-      {error && <p className="text-sm text-red-600 mb-3" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2">
-        <button type="button" className="btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={loading || !date || !title.trim() || (count > 1 && !mode)}
-          onClick={async () => {
-            setLoading(true);
-            setError(null);
-            try {
-              const startUtc = new Date(`${date}T${time}:00`).toISOString();
-              await onConfirm({
-                title,
-                notes,
-                startUtc,
-                timezone,
-                durationMinutes,
-                gapMinutes,
-                mode: count === 1 ? 'SINGLE' : mode,
-                createMeet,
-                idempotencyKey: crypto.randomUUID(),
-                interviewerEmails: interviewers
-                  .split(',')
-                  .map((e) => e.trim())
-                  .filter(Boolean),
-              });
-              onClose();
-            } catch (e) {
-              setError(getAdminActionErrorMessage(e));
-            } finally {
-              setLoading(false);
-            }
-          }}
-        >
-          {loading ? 'Scheduling...' : 'Confirm Schedule'}
-        </button>
-      </div>
+      <textarea className={`${glassFieldClass} mb-4 min-h-[80px]`} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
+      {error && <p className="mb-3 text-center text-sm text-red-600" role="alert">{error}</p>}
+      <ModalActions
+        onClose={onClose}
+        loading={loading}
+        disabled={!date || !title.trim() || (count > 1 && !mode)}
+        confirmLabel="Confirm Schedule"
+        confirmLoadingLabel="Scheduling..."
+        onConfirm={async () => {
+          setLoading(true);
+          setError(null);
+          try {
+            const startUtc = new Date(`${date}T${time}:00`).toISOString();
+            await onConfirm({
+              title,
+              notes,
+              startUtc,
+              timezone,
+              durationMinutes,
+              gapMinutes,
+              mode: count === 1 ? 'SINGLE' : mode,
+              createMeet,
+              idempotencyKey: crypto.randomUUID(),
+              interviewerEmails: interviewers
+                .split(',')
+                .map((e) => e.trim())
+                .filter(Boolean),
+            });
+            onClose();
+          } catch (e) {
+            setError(getAdminActionErrorMessage(e));
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
     </ModalShell>
   );
 }
@@ -566,34 +886,75 @@ export function InterviewModal({
 export function ExportModal({
   count,
   matchingTotal,
+  listTotal,
+  allLabel,
   hasSelection,
+  hasFilters = false,
   onClose,
   onConfirm,
 }: {
   count: number;
   matchingTotal: number;
+  /** Total for this tab's full list (without UI filters). */
+  listTotal?: number;
+  /** First radio label, e.g. "All shortlisted candidates". */
+  allLabel: string;
   hasSelection: boolean;
+  hasFilters?: boolean;
   onClose: () => void;
   onConfirm: (scope: ExportScope, format: ExportFormat) => Promise<void>;
 }) {
-  const [scope, setScope] = useState<ExportScope>(hasSelection ? 'SELECTED' : 'FILTERED');
-  const [format, setFormat] = useState<ExportFormat>('csv');
+  const allCount = listTotal ?? matchingTotal;
+  const defaultScope: ExportScope = hasSelection
+    ? 'SELECTED'
+    : hasFilters
+      ? 'FILTERED'
+      : 'ALL_ACTIVE';
+  const [scope, setScope] = useState<ExportScope>(defaultScope);
+  const [format, setFormat] = useState<ExportFormat>('xlsx');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const affected =
-    scope === 'SELECTED' ? count : scope === 'FILTERED' ? matchingTotal : matchingTotal;
+    scope === 'SELECTED' ? count : scope === 'FILTERED' ? matchingTotal : allCount;
+  const formatBtn = (value: ExportFormat, label: string) => (
+    <button
+      type="button"
+      onClick={() => setFormat(value)}
+      className={
+        format === value
+          ? 'inline-flex min-w-[4.5rem] items-center justify-center rounded-lg border border-hurix-charcoal bg-hurix-charcoal px-3 py-1.5 text-sm font-medium text-white'
+          : 'inline-flex min-w-[4.5rem] items-center justify-center rounded-lg border border-slate-200 bg-white/70 px-3 py-1.5 text-sm font-medium text-hurix-charcoal hover:bg-white'
+      }
+      aria-pressed={format === value}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <ModalShell title="Export Candidates" count={affected} onClose={onClose}>
       <fieldset className="mb-3">
         <legend className="text-sm font-medium mb-2">Scope</legend>
         <label className="flex items-center gap-2 text-sm mb-1">
-          <input type="radio" name="export-scope" checked={scope === 'ALL_ACTIVE'} onChange={() => setScope('ALL_ACTIVE')} />
-          All active candidates
+          <input
+            type="radio"
+            name="export-scope"
+            checked={scope === 'ALL_ACTIVE'}
+            onChange={() => setScope('ALL_ACTIVE')}
+          />
+          {allLabel}
+          {typeof allCount === 'number' ? ` (${allCount})` : ''}
         </label>
-        <label className="flex items-center gap-2 text-sm mb-1">
-          <input type="radio" name="export-scope" checked={scope === 'FILTERED'} onChange={() => setScope('FILTERED')} />
-          Current filtered candidates ({matchingTotal})
+        <label className={`flex items-center gap-2 text-sm mb-1 ${!hasFilters ? 'opacity-40' : ''}`}>
+          <input
+            type="radio"
+            name="export-scope"
+            checked={scope === 'FILTERED'}
+            disabled={!hasFilters}
+            onChange={() => setScope('FILTERED')}
+          />
+          Current filtered candidates{' '}
+          {hasFilters ? `(${matchingTotal})` : '(no filter applied)'}
         </label>
         <label className={`flex items-center gap-2 text-sm mb-1 ${!hasSelection ? 'opacity-40' : ''}`}>
           <input
@@ -606,40 +967,35 @@ export function ExportModal({
           Selected candidates {hasSelection ? `(${count})` : '(none selected)'}
         </label>
       </fieldset>
+
       <fieldset className="mb-4">
         <legend className="text-sm font-medium mb-2">Format</legend>
-        <label className="inline-flex items-center gap-2 text-sm mr-4">
-          <input type="radio" name="export-format" checked={format === 'csv'} onChange={() => setFormat('csv')} />
-          CSV
-        </label>
-        <label className="inline-flex items-center gap-2 text-sm">
-          <input type="radio" name="export-format" checked={format === 'xlsx'} onChange={() => setFormat('xlsx')} />
-          XLSX
-        </label>
+        <div className="flex flex-wrap gap-2">
+          {formatBtn('xlsx', 'XLSX')}
+          {formatBtn('csv', 'CSV')}
+        </div>
       </fieldset>
-      {error && <p className="text-sm text-red-600 mb-3" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2">
-        <button type="button" className="btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={loading || (scope === 'SELECTED' && !hasSelection)}
-          onClick={async () => {
-            setLoading(true);
-            setError(null);
-            try {
-              await onConfirm(scope, format);
-              onClose();
-            } catch (e) {
-              setError(getAdminActionErrorMessage(e));
-            } finally {
-              setLoading(false);
-            }
-          }}
-        >
-          {loading ? 'Exporting...' : 'Download'}
-        </button>
-      </div>
+
+      {error && <p className="mb-3 text-center text-sm text-red-600" role="alert">{error}</p>}
+      <ModalActions
+        onClose={onClose}
+        loading={loading}
+        disabled={(scope === 'SELECTED' && !hasSelection) || (scope === 'FILTERED' && !hasFilters)}
+        confirmLabel="Download"
+        confirmLoadingLabel="Exporting..."
+        onConfirm={async () => {
+          setLoading(true);
+          setError(null);
+          try {
+            await onConfirm(scope, format);
+            onClose();
+          } catch (e) {
+            setError(getAdminActionErrorMessage(e));
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
     </ModalShell>
   );
 }

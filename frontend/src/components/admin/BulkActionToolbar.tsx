@@ -1,6 +1,5 @@
 import {
   Briefcase,
-  Calendar,
   Download,
   Mail,
   RefreshCw,
@@ -14,7 +13,6 @@ export type BulkToolbarAction =
   | 'reminder'
   | 'role'
   | 'reject'
-  | 'interview'
   | 'export'
   | 'delete'
   | null;
@@ -25,7 +23,6 @@ interface BulkActionToolbarProps {
   onSendReminder: () => void;
   onAssignRole: () => void;
   onReject: () => void;
-  onScheduleInterview: () => void;
   onExport: () => void;
   onDelete: () => void;
   onClear: () => void;
@@ -39,7 +36,6 @@ export function BulkActionToolbar({
   onSendReminder,
   onAssignRole,
   onReject,
-  onScheduleInterview,
   onExport,
   onDelete,
   onClear,
@@ -90,7 +86,6 @@ export function BulkActionToolbar({
         {btn('Send Reminder', 'reminder', onSendReminder, Mail)}
         {btn('Assign Job Role', 'role', onAssignRole, Briefcase)}
         {btn('Reject', 'reject', onReject, UserX)}
-        {btn('Schedule Interview', 'interview', onScheduleInterview, Calendar)}
         {btn('Export', 'export', onExport, Download)}
         {btn('Delete', 'delete', onDelete, Trash2, true)}
         <button

@@ -12,6 +12,8 @@ import {
 } from './candidate-selection.service';
 import { BulkOperationResult } from './candidate-bulk.service';
 
+const CANDIDATE_PORTAL_URL = 'https://candidates.hurixsystems.com/';
+
 const DEFAULT_TEMPLATES = [
   {
     name: 'Assessment Reminder',
@@ -20,6 +22,7 @@ const DEFAULT_TEMPLATES = [
 <p>This is a friendly reminder to complete your Hurix Talent assessment for <strong>{{assignedRole}}</strong>.</p>
 <p>Current status: {{assessmentStatus}}</p>
 <p>{{#assessmentLink}}<a href="{{assessmentLink}}">Continue your assessment</a>{{/assessmentLink}}</p>
+<p><a href="${CANDIDATE_PORTAL_URL}">${CANDIDATE_PORTAL_URL}</a></p>
 <p>Thank you,<br/>{{companyName}}</p>`,
   },
   {
@@ -28,6 +31,7 @@ const DEFAULT_TEMPLATES = [
     bodyHtml: `<p>Hello {{candidateName}},</p>
 <p>We are reviewing applications for <strong>{{assignedRole}}</strong>. Please ensure your profile is complete.</p>
 <p>Application ID: {{applicationId}}</p>
+<p><a href="${CANDIDATE_PORTAL_URL}">${CANDIDATE_PORTAL_URL}</a></p>
 <p>Regards,<br/>{{companyName}}</p>`,
   },
 ];
@@ -45,13 +49,45 @@ function renderTemplate(template: string, vars: Record<string, string>): string 
 }
 
 async function ensureDefaultTemplates(adminUserId: string) {
-  const count = await prisma.emailReminderTemplate.count();
-  if (count > 0) return;
   for (const t of DEFAULT_TEMPLATES) {
-    await prisma.emailReminderTemplate.create({
-      data: { ...t, createdById: adminUserId, updatedAt: new Date() },
+    const existing = await prisma.emailReminderTemplate.findFirst({
+      where: { name: t.name, isActive: true },
+      orderBy: { createdAt: 'asc' },
     });
+    if (!existing) {
+      await prisma.emailReminderTemplate.create({
+        data: { ...t, createdById: adminUserId, updatedAt: new Date() },
+      });
+      continue;
+    }
+    // Keep seeded defaults in sync (portal link, etc.) without wiping custom-named templates.
+    if (!existing.bodyHtml.includes(CANDIDATE_PORTAL_URL)) {
+      await prisma.emailReminderTemplate.update({
+        where: { id: existing.id },
+        data: {
+          subject: t.subject,
+          bodyHtml: t.bodyHtml,
+          updatedById: adminUserId,
+        },
+      });
+    }
   }
+}
+
+function normalizeEmailTemplateInput(input: {
+  name?: string;
+  subject?: string;
+  bodyHtml?: string;
+}) {
+  const name = String(input.name || '').trim();
+  const subject = String(input.subject || '').trim();
+  const bodyHtml = String(input.bodyHtml || '').trim();
+  if (!name) throw new AppError(400, 'Template name is required');
+  if (!subject) throw new AppError(400, 'Subject is required');
+  if (!bodyHtml) throw new AppError(400, 'Email body is required');
+  if (name.length > 120) throw new AppError(400, 'Template name is too long');
+  if (subject.length > 300) throw new AppError(400, 'Subject is too long');
+  return { name, subject, bodyHtml };
 }
 
 export class ReminderService {
@@ -60,6 +96,46 @@ export class ReminderService {
     return prisma.emailReminderTemplate.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
+    });
+  }
+
+  async createTemplate(
+    adminUserId: string,
+    input: { name: string; subject: string; bodyHtml: string }
+  ) {
+    const data = normalizeEmailTemplateInput(input);
+    return prisma.emailReminderTemplate.create({
+      data: {
+        ...data,
+        createdById: adminUserId,
+        updatedById: adminUserId,
+      },
+    });
+  }
+
+  async updateTemplate(
+    templateId: string,
+    adminUserId: string,
+    input: { name: string; subject: string; bodyHtml: string }
+  ) {
+    const existing = await prisma.emailReminderTemplate.findUnique({ where: { id: templateId } });
+    if (!existing || !existing.isActive) throw new AppError(404, 'Template not found');
+    const data = normalizeEmailTemplateInput(input);
+    return prisma.emailReminderTemplate.update({
+      where: { id: templateId },
+      data: {
+        ...data,
+        updatedById: adminUserId,
+      },
+    });
+  }
+
+  async deleteTemplate(templateId: string, adminUserId: string) {
+    const existing = await prisma.emailReminderTemplate.findUnique({ where: { id: templateId } });
+    if (!existing || !existing.isActive) throw new AppError(404, 'Template not found');
+    return prisma.emailReminderTemplate.update({
+      where: { id: templateId },
+      data: { isActive: false, updatedById: adminUserId },
     });
   }
 

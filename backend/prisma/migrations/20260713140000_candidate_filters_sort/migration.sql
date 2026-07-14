@@ -25,7 +25,7 @@ FROM (
     s.candidate_id,
     s.score
   FROM "submissions" s
-  ORDER BY s.candidate_id, s.submitted_at DESC NULLS LAST, s.created_at DESC
+  ORDER BY s.candidate_id, s.submitted_at DESC NULLS LAST
 ) latest
 WHERE cp.id = latest.candidate_id
   AND cp.latest_score IS NULL;

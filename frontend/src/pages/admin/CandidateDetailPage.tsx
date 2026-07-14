@@ -6,6 +6,8 @@ import { ResumePreviewModal } from '../../components/admin/ResumePreviewModal';
 import { ActivityTimeline } from '../../components/admin/ActivityTimeline';
 import { OwnerAssignModal } from '../../components/admin/OwnerAssignModal';
 import { AdminLayout } from '../../components/layout/AdminLayout';
+import { GlassModal, glassBtnSecondaryClass } from '../../components/ui/GlassDialog';
+import { TruncatedText } from '../../components/ui/TruncatedText';
 import {
   assignCandidateOwner,
   getCandidateById,
@@ -17,6 +19,15 @@ import {
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { formatDate } from '../../utils/validation';
 import { formatSourceLabel } from '../../utils/utm';
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 items-start justify-between gap-4 text-xs">
+      <span className="shrink-0 text-hurix-gray">{label}</span>
+      <TruncatedText text={value} className="max-w-[65%] text-right" />
+    </div>
+  );
+}
 
 export function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -127,10 +138,25 @@ export function CandidateDetailPage() {
     </span>
   );
 
+  const isRejected = data.selectionStatus === 'REJECTED' || data.journeyStatus === 'REJECTED';
+  const isShortlisted = data.selectionStatus === 'SHORTLISTED';
+  const isAdminAdded = data.creationSource === 'ADMIN_CREATED';
+  const backTo = data.deletedAt
+    ? { path: '/admin/deleted-candidates', label: 'Back to Deleted Candidates' }
+    : isRejected
+      ? { path: '/admin/rejected-candidates', label: 'Back to Rejected Candidates' }
+      : isShortlisted
+        ? { path: '/admin/shortlisted-candidates', label: 'Back to Shortlisted Candidates' }
+        : data.isTestUser
+          ? { path: '/admin/test-users', label: 'Back to Test Users' }
+          : isAdminAdded
+            ? { path: '/admin/added-candidates', label: 'Back to Added Candidates' }
+            : { path: '/admin/candidates', label: 'Back to Candidates' };
+
   return (
     <AdminLayout>
-      <Link to="/admin/candidates" className="mb-3 flex items-center gap-2 text-xs text-hurix-blue hover:underline">
-        <ArrowLeft size={14} /> Back to Candidates
+      <Link to={backTo.path} className="mb-3 flex items-center gap-2 text-xs text-hurix-blue hover:underline">
+        <ArrowLeft size={14} /> {backTo.label}
       </Link>
 
       {data.deletedAt && (
@@ -165,51 +191,67 @@ export function CandidateDetailPage() {
       )}
 
       <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <h1 className="text-xl font-bold text-hurix-charcoal">{data.fullName}</h1>
+        <h1 className="min-w-0 text-xl font-bold text-hurix-charcoal">
+          <TruncatedText text={data.fullName} className="font-bold" />
+        </h1>
       </div>
 
       <div className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {detailView === 'profile' && (
         <>
-          <div className="card-premium space-y-2.5 p-4">
+          <div className="card-premium space-y-2.5 overflow-hidden p-4">
           <h2 className="mb-2 text-base font-semibold">Profile</h2>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Name</span><span className="text-right">{data.fullName}</span></div>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Email</span><span className="text-right break-all">{data.user.email}</span></div>
-          <div className="flex justify-between gap-4 text-xs">
-            <span className="text-hurix-gray shrink-0">Phone</span>
-            <span className="inline-flex flex-wrap justify-end gap-2 text-right">
-              <span>{data.fullPhone || data.phone}</span>
+          <DetailRow label="Name" value={data.fullName} />
+          <DetailRow label="Email" value={data.user.email} />
+          <div className="flex min-w-0 items-start justify-between gap-4 text-xs">
+            <span className="shrink-0 text-hurix-gray">Phone</span>
+            <span className="inline-flex min-w-0 max-w-[70%] flex-wrap items-center justify-end gap-2 text-right">
+              <TruncatedText text={String(data.fullPhone || data.phone || '—')} className="max-w-full text-right" />
               <button
                 type="button"
                 onClick={() => copyPhoneNumber(data.fullPhone || data.phone)}
-                className="inline-flex items-center gap-1 rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-hurix-charcoal hover:bg-slate-50"
+                className="inline-flex shrink-0 items-center gap-1 rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-hurix-charcoal hover:bg-slate-50"
               >
                 <Copy size={10} />
                 {phoneCopied ? 'Copied' : 'Copy'}
               </button>
               <a
                 href={`tel:${String(data.fullPhone || data.phone).replace(/[^\d+]/g, '')}`}
-                className="inline-flex items-center gap-1 rounded border border-green-200 px-2 py-1 text-[11px] font-medium text-green-700 hover:bg-green-50 lg:hidden"
+                className="inline-flex shrink-0 items-center gap-1 rounded border border-green-200 px-2 py-1 text-[11px] font-medium text-green-700 hover:bg-green-50 lg:hidden"
               >
                 <Phone size={12} />
                 Call
               </a>
             </span>
           </div>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Country</span><span>{data.countryName || data.phoneCountry || '—'}</span></div>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Country Code</span><span>{data.phoneCountryIso || data.countryCode || '—'}</span></div>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Years of Experience</span><span>{data.yearsOfExperience ?? '—'}</span></div>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Experience Category</span><span>{data.experienceLabel || '—'}</span></div>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">LinkedIn</span><a href={data.linkedinUrl} target="_blank" rel="noreferrer" className="text-hurix-blue text-right break-all">{data.linkedinUrl}</a></div>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Role</span><span className="text-right">{data.appliedRole || 'Not Assigned'}</span></div>
-          <div className="flex justify-between gap-4 text-xs items-start">
-            <span className="text-hurix-gray shrink-0">Owner</span>
-            <span className="text-right">
-              {resolvedOwner?.email || 'Not Assigned'}
+          <DetailRow label="Country" value={data.countryName || data.phoneCountry || '—'} />
+          <DetailRow label="Country Code" value={String(data.phoneCountryIso || data.countryCode || '—')} />
+          <DetailRow label="Years of Experience" value={String(data.yearsOfExperience ?? '—')} />
+          <DetailRow label="Experience Category" value={data.experienceLabel || '—'} />
+          <div className="flex min-w-0 items-start justify-between gap-4 text-xs">
+            <span className="shrink-0 text-hurix-gray">LinkedIn</span>
+            {data.linkedinUrl ? (
+              <a
+                href={data.linkedinUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="min-w-0 max-w-[65%] text-hurix-blue"
+              >
+                <TruncatedText text={data.linkedinUrl} className="text-hurix-blue" />
+              </a>
+            ) : (
+              <span>—</span>
+            )}
+          </div>
+          <DetailRow label="Role" value={data.appliedRole || 'Not Assigned'} />
+          <div className="flex min-w-0 items-start justify-between gap-4 text-xs">
+            <span className="shrink-0 text-hurix-gray">Owner</span>
+            <span className="inline-flex min-w-0 max-w-[70%] items-center justify-end gap-2 text-right">
+              <TruncatedText text={resolvedOwner?.email || 'Not Assigned'} className="min-w-0" />
               {isSuperAdmin && (
                 <button
                   type="button"
-                  className="ml-2 text-hurix-blue underline text-[11px]"
+                  className="shrink-0 text-[11px] text-hurix-blue underline"
                   onClick={() => setShowOwnerModal(true)}
                 >
                   {resolvedOwner || data.ownerAdminId ? 'Reassign' : 'Assign'}
@@ -217,39 +259,41 @@ export function CandidateDetailPage() {
               )}
             </span>
           </div>
-          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Referral</span><span>{data.referralCode || '-'}</span></div>
+          <DetailRow label="Referral" value={data.referralCode || '-'} />
           <div className="flex justify-between text-xs"><span className="text-hurix-gray">Email Verified</span>{verificationBadge(Boolean(data.emailVerified))}</div>
-          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Journey Status</span><span className="font-medium">{data.journeyStatus?.replace(/_/g, ' ') || '-'}</span></div>
+          <DetailRow label="Journey Status" value={data.journeyStatus?.replace(/_/g, ' ') || '-'} />
           </div>
 
-          <div className="card-premium space-y-2.5 p-4">
+          <div className="card-premium space-y-2.5 overflow-hidden p-4">
             <h2 className="mb-2 text-base font-semibold">Applied Position</h2>
-          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Role</span><span className="font-medium">{data.selectedRoleName || '—'}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Country</span><span>{data.selectedCountry || '—'}</span></div>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Compensation</span><span className="text-right">{data.selectedCompensation || '—'}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Selected On</span><span>{data.roleSelectedAt ? formatDate(data.roleSelectedAt) : '—'}</span></div>
+          <DetailRow label="Role" value={data.selectedRoleName || '—'} />
+          <DetailRow label="Country" value={data.selectedCountry || '—'} />
+          <DetailRow label="Compensation" value={data.selectedCompensation || '—'} />
+          <DetailRow label="Selected On" value={data.roleSelectedAt ? formatDate(data.roleSelectedAt) : '—'} />
           {Array.isArray(data.selectedSkills) && data.selectedSkills.length > 0 && (
             <div className="pt-2">
               <p className="text-hurix-gray text-sm mb-2">Skills</p>
               <div className="flex flex-wrap gap-1">
                 {(data.selectedSkills as string[]).map((s) => (
-                  <span key={s} className="px-2 py-0.5 bg-hurix-blue/10 text-hurix-blue text-xs rounded-full">{s}</span>
+                  <span key={s} className="max-w-full truncate px-2 py-0.5 bg-hurix-blue/10 text-hurix-blue text-xs rounded-full" title={s}>
+                    {s}
+                  </span>
                 ))}
               </div>
             </div>
           )}
           </div>
 
-          <div className="card-premium space-y-2.5 p-4">
+          <div className="card-premium space-y-2.5 overflow-hidden p-4">
             <h2 className="mb-2 text-base font-semibold">Acquisition</h2>
-          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Source</span><span>{formatSourceLabel(data.utmSource)}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Medium</span><span>{data.utmMedium || '-'}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Campaign</span><span>{data.utmCampaign || '-'}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-hurix-gray">First Touch</span><span>{formatSourceLabel(data.firstTouchSource)}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Last Touch</span><span>{formatSourceLabel(data.lastTouchSource)}</span></div>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Landing Page</span><span className="text-right break-all text-[11px]">{data.attributionLandingPage || '-'}</span></div>
-          <div className="flex justify-between gap-4 text-xs"><span className="text-hurix-gray shrink-0">Referrer</span><span className="text-right break-all text-[11px]">{data.attributionReferrer || '-'}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-hurix-gray">Device</span><span>{data.attributionDevice || '-'}</span></div>
+          <DetailRow label="Source" value={formatSourceLabel(data.utmSource)} />
+          <DetailRow label="Medium" value={data.utmMedium || '-'} />
+          <DetailRow label="Campaign" value={data.utmCampaign || '-'} />
+          <DetailRow label="First Touch" value={formatSourceLabel(data.firstTouchSource)} />
+          <DetailRow label="Last Touch" value={formatSourceLabel(data.lastTouchSource)} />
+          <DetailRow label="Landing Page" value={data.attributionLandingPage || '-'} />
+          <DetailRow label="Referrer" value={data.attributionReferrer || '-'} />
+          <DetailRow label="Device" value={data.attributionDevice || '-'} />
           </div>
 
           {id && <ActivityTimeline candidateId={id} />}
@@ -257,14 +301,14 @@ export function CandidateDetailPage() {
         )}
 
         {detailView === 'assessment' && (
-        <div className="card-premium space-y-3">
+        <div className="card-premium space-y-3 overflow-hidden">
           <h2 className="font-semibold text-lg mb-4">Assessment</h2>
-          <div className="flex justify-between text-sm"><span className="text-hurix-gray">Assessment Status</span><span className="font-medium">{data.assessmentStatus?.replace(/_/g, ' ') || 'NOT STARTED'}</span></div>
+          <DetailRow label="Assessment Status" value={data.assessmentStatus?.replace(/_/g, ' ') || 'NOT STARTED'} />
           {submission ? (
             <>
-              <div className="flex justify-between text-sm"><span className="text-hurix-gray">Assessment Score</span><span className="font-bold text-lg">{Number(submission.score)}/10</span></div>
-              <div className="flex justify-between text-sm"><span className="text-hurix-gray">Passed Questions</span><span>{submission.passedQuestions}/{submission.totalQuestions}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-hurix-gray">Submission Date</span><span>{formatDate(submission.submittedAt)}</span></div>
+              <div className="flex justify-between gap-4 text-sm"><span className="shrink-0 text-hurix-gray">Assessment Score</span><span className="font-bold text-lg">{Number(submission.score)}/10</span></div>
+              <DetailRow label="Passed Questions" value={`${submission.passedQuestions}/${submission.totalQuestions}`} />
+              <DetailRow label="Submission Date" value={formatDate(submission.submittedAt)} />
             </>
           ) : (
             <p className="text-sm text-hurix-gray">No submission yet.</p>
@@ -313,9 +357,11 @@ export function CandidateDetailPage() {
                       <FileText className="text-slate-800" size={22} />
                     )}
                   </div>
-                  <p className="mt-1.5 line-clamp-2 min-h-[1.75rem] text-[11px] font-semibold leading-3.5 text-slate-950" title={resume.fileName}>
-                    {resume.fileName}
-                  </p>
+                  <TruncatedText
+                    text={resume.fileName}
+                    lines={2}
+                    className="mt-1.5 min-h-[1.75rem] text-[11px] font-semibold leading-3.5 text-slate-950"
+                  />
                   {resume.isPrimary && (
                     <span className="mt-1 inline-flex rounded-full bg-black px-2 py-0.5 text-[9px] font-semibold text-white">
                       Primary
@@ -354,9 +400,9 @@ export function CandidateDetailPage() {
           <div className="space-y-4">
             {submission.answers.map((answer: { id: string; question: { title: string; mcqOptions?: string[] | null }; isFullyPassed: boolean; passedTests: number; failedTests: number; code: string; selectedOptionIndex?: number | null }) => (
               <details key={answer.id} className="border rounded-lg">
-                <summary className="p-4 cursor-pointer flex items-center justify-between hover:bg-slate-50">
-                  <span className="font-medium">{answer.question.title}</span>
-                  <span className={`text-xs px-2 py-1 rounded-full ${answer.isFullyPassed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                <summary className="flex cursor-pointer items-center justify-between gap-3 p-4 hover:bg-slate-50">
+                  <TruncatedText text={answer.question.title} className="min-w-0 flex-1 font-medium" />
+                  <span className={`shrink-0 text-xs px-2 py-1 rounded-full ${answer.isFullyPassed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                     {answer.passedTests}/{answer.passedTests + answer.failedTests} tests
                   </span>
                 </summary>
@@ -384,31 +430,22 @@ export function CandidateDetailPage() {
         />
       )}
       {markdownPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between gap-4 border-b px-4 py-3">
-              <div>
-                <h2 className="font-semibold text-hurix-charcoal">Assessment Markdown</h2>
-                <p className="text-xs text-hurix-gray">{markdownPreview.filename}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={downloadMarkdown} className="btn-secondary flex items-center gap-2 px-3 py-2 text-xs">
-                  <Download size={14} /> Download
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMarkdownPreview(null)}
-                  className="rounded-lg p-2 text-hurix-gray hover:bg-slate-100 hover:text-hurix-charcoal"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-            <pre className="h-full overflow-auto whitespace-pre-wrap bg-slate-950 p-4 text-xs leading-6 text-slate-100">
-              {markdownPreview.content}
-            </pre>
+        <GlassModal
+          title="Assessment Markdown"
+          subtitle={markdownPreview.filename}
+          onClose={() => setMarkdownPreview(null)}
+          maxWidth="5xl"
+          className="flex h-[90vh] flex-col !overflow-hidden !p-4"
+        >
+          <div className="mb-3 flex justify-end">
+            <button type="button" onClick={downloadMarkdown} className={`${glassBtnSecondaryClass} h-9 gap-2 px-3 text-xs`}>
+              <Download size={14} /> Download
+            </button>
           </div>
-        </div>
+          <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-xl border border-white/70 bg-neutral-950/95 p-4 text-xs leading-6 text-slate-100">
+            {markdownPreview.content}
+          </pre>
+        </GlassModal>
       )}
       {showOwnerModal && data && id && (
         <OwnerAssignModal

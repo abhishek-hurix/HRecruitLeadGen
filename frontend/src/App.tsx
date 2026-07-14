@@ -18,6 +18,11 @@ import { DashboardPage } from './pages/admin/DashboardPage';
 import { CandidatesPage } from './pages/admin/CandidatesPage';
 import { AddCandidatePage } from './pages/admin/AddCandidatePage';
 import { DeletedCandidatesPage } from './pages/admin/DeletedCandidatesPage';
+import { RejectedCandidatesPage } from './pages/admin/RejectedCandidatesPage';
+import { ShortlistedCandidatesPage } from './pages/admin/ShortlistedCandidatesPage';
+import { AddedCandidatesPage } from './pages/admin/AddedCandidatesPage';
+import { TemplatesPage } from './pages/admin/TemplatesPage';
+import { TestUsersPage } from './pages/admin/TestUsersPage';
 import { CandidateDetailPage } from './pages/admin/CandidateDetailPage';
 import { QuestionsPage } from './pages/admin/QuestionsPage';
 import { AdminUsersPage } from './pages/admin/AdminUsersPage';
@@ -58,7 +63,12 @@ export default function App() {
       <Route path="/admin/dashboard" element={<AdminRoute permission="view_dashboard"><DashboardPage /></AdminRoute>} />
       <Route path="/admin/candidates" element={<AdminRoute permission="view_candidates"><CandidatesPage /></AdminRoute>} />
       <Route path="/admin/candidates/new" element={<AdminRoute permission="manage_candidates"><AddCandidatePage /></AdminRoute>} />
+      <Route path="/admin/shortlisted-candidates" element={<AdminRoute permission="view_candidates"><ShortlistedCandidatesPage /></AdminRoute>} />
+      <Route path="/admin/added-candidates" element={<AdminRoute permission="view_candidates"><AddedCandidatesPage /></AdminRoute>} />
+      <Route path="/admin/rejected-candidates" element={<AdminRoute permission="view_candidates"><RejectedCandidatesPage /></AdminRoute>} />
       <Route path="/admin/deleted-candidates" element={<AdminRoute permission="view_deleted_candidates"><DeletedCandidatesPage /></AdminRoute>} />
+      <Route path="/admin/test-users" element={<AdminRoute permission="view_candidates"><TestUsersPage /></AdminRoute>} />
+      <Route path="/admin/templates" element={<AdminRoute permission="manage_candidates"><TemplatesPage /></AdminRoute>} />
       <Route path="/admin/job-roles" element={<AdminRoute permission="view_job_roles"><JobRolesPage /></AdminRoute>} />
       <Route path="/admin/candidates/:id" element={<AdminRoute permission="view_candidates"><CandidateDetailPage /></AdminRoute>} />
       <Route path="/admin/questions" element={<AdminRoute permission="manage_questions"><QuestionsPage /></AdminRoute>} />

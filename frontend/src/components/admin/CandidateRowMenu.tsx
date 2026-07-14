@@ -9,6 +9,7 @@ interface CandidateRowMenuProps {
   onSendReminder: () => void;
   onChangeStatus: () => void;
   onAssignRole: () => void;
+  onShortlist: () => void;
   onReject: () => void;
   onScheduleInterview: () => void;
   onExport: () => void;
@@ -20,6 +21,7 @@ export function CandidateRowMenu({
   onSendReminder,
   onChangeStatus,
   onAssignRole,
+  onShortlist,
   onReject,
   onScheduleInterview,
   onExport,
@@ -118,6 +120,7 @@ export function CandidateRowMenu({
             {item('Send Reminder', onSendReminder)}
             {item('Change Status', onChangeStatus)}
             {item('Assign Job Role', onAssignRole)}
+            {item('Shortlist', onShortlist)}
             {item('Reject', onReject, true)}
             {item('Schedule Interview', onScheduleInterview)}
             {item('Export Candidate', onExport)}

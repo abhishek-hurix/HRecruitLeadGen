@@ -162,11 +162,16 @@ export class AdminService {
     page?: number;
     limit?: number;
     pageSize?: number;
+    viewerRole?: AdminRole;
+    isTestUser?: boolean | null;
+    creationSource?: string | null;
   }) {
     const page = Math.max(1, params.page || 1);
-    const rawSize = params.pageSize || params.limit || 25;
-    const pageSize = [25, 50, 100].includes(rawSize) ? rawSize : 25;
+    const rawSize = params.pageSize || params.limit || 10;
+    const pageSize = [5, 10, 20, 30, 50, 100].includes(rawSize) ? rawSize : 10;
     const skip = (page - 1) * pageSize;
+    const canViewRejection =
+      !!params.viewerRole && hasPermission(params.viewerRole, Permission.VIEW_REJECTION_REASONS);
 
     const filterSnapshot = {
       search: params.search,
@@ -185,6 +190,8 @@ export class AdminService {
       ownerFilter: params.ownerId,
       inactivityDays: params.inactivityDays,
       minScore: params.minScore,
+      isTestUser: params.isTestUser,
+      creationSource: params.creationSource,
       sortBy: params.sortBy as import('./candidate-selection.service').CandidateSortBy | undefined,
       sortOrder: params.sortOrder as import('./candidate-selection.service').CandidateSortOrder | undefined,
     };
@@ -206,6 +213,8 @@ export class AdminService {
         include: {
           user: true,
           ownerAdmin: { select: { id: true, email: true, role: true } },
+          createdByAdmin: { select: { id: true, email: true, role: true } },
+          rejectedByAdmin: { select: { email: true } },
           assessmentTokens: { orderBy: { createdAt: 'desc' }, take: 1 },
           assessments: {
             orderBy: { createdAt: 'desc' },
@@ -253,10 +262,8 @@ export class AdminService {
       let scoreLabel: string;
       if (hasSubmission && scoreValue != null && !Number.isNaN(scoreValue)) {
         scoreLabel = `${scoreValue}/10`;
-      } else if (c.assessmentStatus === 'NOT_STARTED') {
-        scoreLabel = 'No Assessment';
       } else {
-        scoreLabel = 'Not Available';
+        scoreLabel = 'NA';
       }
 
       const countryIso = c.phoneCountryIso || null;
@@ -298,6 +305,15 @@ export class AdminService {
         owner: c.ownerAdmin
           ? { id: c.ownerAdmin.id, email: c.ownerAdmin.email, role: c.ownerAdmin.role }
           : null,
+        creationSource: c.creationSource,
+        createdByAdminId: c.createdByAdminId || null,
+        addedBy: c.createdByAdmin?.email || null,
+        createdByAdmin: c.createdByAdmin
+          ? { id: c.createdByAdmin.id, email: c.createdByAdmin.email, role: c.createdByAdmin.role }
+          : null,
+        rejectedAt: c.rejectedAt || null,
+        rejectedBy: c.rejectedByAdmin?.email || null,
+        rejectionReason: canViewRejection ? c.rejectionReason || null : undefined,
       };
     });
 

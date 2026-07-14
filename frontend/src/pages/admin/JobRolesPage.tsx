@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, Archive, CheckCircle, XCircle, Sparkles, Info } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
+import { GlassDialog } from '../../components/ui/GlassDialog';
 import {
   getJobRoles,
   createJobRole,
@@ -380,40 +381,22 @@ export function JobRolesPage() {
       )}
 
       {generateConfirmRole && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-hurix-blue/10 text-hurix-blue">
-                <Sparkles size={20} />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-hurix-charcoal">Replace Existing Questions?</h2>
-                <p className="text-sm text-hurix-gray">{generateConfirmRole.title as string}</p>
-              </div>
-            </div>
-            <p className="mb-6 text-sm leading-6 text-hurix-gray">
+        <GlassDialog
+          title="Replace Existing Questions?"
+          message={
+            <>
+              <span className="mb-2 block font-medium text-neutral-800">
+                {generateConfirmRole.title as string}
+              </span>
               This role already has {Number(generateConfirmRole.activeQuestionCount || 0)} active MCQ questions.
               Generating again will replace the existing active questions with 10 fresh MCQ questions.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setGenerateConfirmRole(null)}
-                className="btn-secondary px-4 py-2"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => runGenerateQuestions(generateConfirmRole.id as string)}
-                disabled={generatingRoleId !== null}
-                className="btn-primary px-4 py-2"
-              >
-                {generatingRoleId === generateConfirmRole.id ? 'Generating...' : 'OK, Generate'}
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          confirmLabel="OK, Generate"
+          onConfirm={() => runGenerateQuestions(generateConfirmRole.id as string)}
+          onCancel={() => setGenerateConfirmRole(null)}
+          isLoading={generatingRoleId !== null}
+        />
       )}
     </AdminLayout>
   );

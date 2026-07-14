@@ -21,7 +21,7 @@ export type CandidateSortOrder = 'asc' | 'desc';
 
 export type RoleAssignmentFilter = 'all' | 'assigned' | 'unassigned';
 
-export type InactivityDays = 7 | 30 | 90;
+export type InactivityDays = 7 | 15 | 30 | 45;
 
 export type CandidateOwner = {
   id: string;
@@ -49,6 +49,10 @@ export type CandidateListFilters = {
   inactivityDays: '' | InactivityDays | string;
   sortBy: string;
   sortOrder: string;
+  /** When true, selection/list targets test-user profiles. */
+  isTestUser?: boolean;
+  /** ADMIN_CREATED = candidates added via Add Candidate. */
+  creationSource?: 'ADMIN_CREATED' | 'SELF_REGISTERED' | '';
 };
 
 export type PaginationMeta = {
@@ -185,6 +189,12 @@ export type ReminderTemplate = {
   name: string;
   subject: string;
   bodyHtml: string;
+};
+
+export type WhatsAppTemplate = {
+  id: string;
+  name: string;
+  bodyText: string;
 };
 
 export type ExportScope = 'SELECTED' | 'FILTERED' | 'ALL_ACTIVE';
@@ -349,6 +359,8 @@ export function filtersToBackendSnapshot(filters: CandidateListFilters): Record<
     inactivityDays: filters.inactivityDays ? Number(filters.inactivityDays) : null,
     sortBy: filters.sortBy || null,
     sortOrder: filters.sortOrder || null,
+    isTestUser: typeof filters.isTestUser === 'boolean' ? filters.isTestUser : null,
+    creationSource: filters.creationSource || null,
   };
 }
 

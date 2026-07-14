@@ -1,7 +1,7 @@
-import { ExperienceCategory, Prisma, SelectionStatus } from '@prisma/client';
+import { CandidateCreationSource, ExperienceCategory, Prisma, SelectionStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { AppError } from '../utils/errors';
-import { activeCandidateWhere, mergeCandidateWhere } from '../utils/candidate-scope';
+import { activeCandidateWhere, deletedCandidateWhere, mergeCandidateWhere } from '../utils/candidate-scope';
 import { parseCountryCodesParam } from '../utils/country';
 import {
   istInclusiveRangeToUtc,
@@ -13,7 +13,7 @@ import {
 
 export type CandidateSelectionMode = 'IDS' | 'ALL_MATCHING';
 
-export type RoleAssignmentFilter = 'all' | 'assigned' | 'unassigned' | string;
+export type RoleAssignmentFilter = 'all' | 'assigned' | 'unassigned' | 'na' | string;
 
 export type CandidateSortBy =
   | 'name'
@@ -37,6 +37,8 @@ export interface CandidateFilterSnapshot {
   countryCodes?: string[] | null;
   score?: number | null;
   minScore?: number | null;
+  /** When true, only candidates with no scored submission (shows as — / blank). */
+  noScore?: boolean | null;
   jobRoleId?: string | null;
   role?: string | null;
   /** all | assigned | unassigned | specific job role UUID */
@@ -50,6 +52,10 @@ export interface CandidateFilterSnapshot {
   /** 7 | 30 | 90 — lastActivityAt <= IST cutoff */
   inactivityDays?: number | null;
   status?: string | null;
+  /** When true, only test-user profiles; when false/omit, exclude test users from main lists. */
+  isTestUser?: boolean | null;
+  /** SELF_REGISTERED | ADMIN_CREATED — when set, filter by CandidateProfile.creationSource */
+  creationSource?: string | null;
   sortBy?: CandidateSortBy | null;
   sortOrder?: CandidateSortOrder | null;
 }
@@ -75,6 +81,7 @@ export function normalizeFilterSnapshot(filters: CandidateFilterSnapshot = {}): 
     countryCodes: countryCodes.length ? countryCodes : null,
     score: filters.score ?? null,
     minScore: filters.minScore ?? filters.score ?? null,
+    noScore: filters.noScore ?? null,
     jobRoleId: filters.jobRoleId || filters.role || null,
     role: filters.role || filters.jobRoleId || null,
     roleAssignment: filters.roleAssignment || null,
@@ -84,6 +91,8 @@ export function normalizeFilterSnapshot(filters: CandidateFilterSnapshot = {}): 
     ownerId: filters.ownerId || null,
     ownerFilter: filters.ownerFilter || filters.ownerId || null,
     inactivityDays: filters.inactivityDays ?? null,
+    isTestUser: filters.isTestUser ?? null,
+    creationSource: filters.creationSource || null,
     sortBy: filters.sortBy || null,
     sortOrder: filters.sortOrder || null,
   };
@@ -132,6 +141,18 @@ export function buildCandidateListWhere(
     parts.push(activeCandidateWhere());
   }
 
+  if (filters.isTestUser === true) {
+    parts.push({ isTestUser: true });
+  } else {
+    parts.push({ isTestUser: false });
+  }
+
+  if (filters.creationSource === 'ADMIN_CREATED') {
+    parts.push({ creationSource: CandidateCreationSource.ADMIN_CREATED });
+  } else if (filters.creationSource === 'SELF_REGISTERED') {
+    parts.push({ creationSource: CandidateCreationSource.SELF_REGISTERED });
+  }
+
   const search = filters.search?.trim();
   if (search) {
     if (search.length > 200) {
@@ -161,7 +182,7 @@ export function buildCandidateListWhere(
   const roleAssignment = filters.roleAssignment;
   if (roleAssignment === 'assigned') {
     parts.push({ selectedRoleId: { not: null } });
-  } else if (roleAssignment === 'unassigned') {
+  } else if (roleAssignment === 'unassigned' || roleAssignment === 'na') {
     parts.push({ selectedRoleId: null });
   } else {
     const roleId =
@@ -179,25 +200,55 @@ export function buildCandidateListWhere(
     }
   }
 
-  const minScore = filters.minScore ?? filters.score;
-  if (typeof minScore === 'number' && Number.isFinite(minScore)) {
-    parts.push({ submissions: { some: { score: { gte: minScore } } } });
+  if (filters.noScore) {
+    // No submission score yet — shown as "—" / blank in the UI.
+    parts.push({ submissions: { none: {} } });
+  } else {
+    const minScore = filters.minScore ?? filters.score;
+    if (typeof minScore === 'number' && Number.isFinite(minScore)) {
+      parts.push({ submissions: { some: { score: { gte: minScore } } } });
+    }
   }
 
   const status = filters.journeyStatus || filters.status;
-  if (status) {
-    if (status.startsWith('ASSESSMENT_')) {
-      const assessmentStatus = status.replace(
-        'ASSESSMENT_',
-        ''
-      ) as Prisma.EnumCandidateAssessmentStatusFilter['equals'];
-      parts.push({ assessmentStatus });
-    } else if (status === 'REJECTED') {
-      parts.push({ selectionStatus: SelectionStatus.REJECTED });
-    } else if (
-      ['REGISTERED', 'EMAIL_SENT', 'VERIFIED', 'STARTED', 'SUBMITTED', 'EXPIRED'].includes(status)
-    ) {
-      parts.push({ candidateStatus: status as Prisma.EnumCandidateStatusFilter['equals'] });
+  // Rejected / Shortlisted belong on their own pages — keep them out of the main list
+  // (and any non-status-specific filters / bulk ALL_MATCHING selections).
+  // Test Users page may include rejected/shortlisted test accounts.
+  if (status === 'REJECTED') {
+    parts.push({ selectionStatus: SelectionStatus.REJECTED });
+  } else if (status === 'SHORTLISTED') {
+    parts.push({ selectionStatus: SelectionStatus.SHORTLISTED });
+  } else if (filters.isTestUser === true) {
+    // no selection-status restriction for the dedicated test-users view
+    if (status) {
+      if (status.startsWith('ASSESSMENT_')) {
+        const assessmentStatus = status.replace(
+          'ASSESSMENT_',
+          ''
+        ) as Prisma.EnumCandidateAssessmentStatusFilter['equals'];
+        parts.push({ assessmentStatus });
+      } else if (
+        ['REGISTERED', 'EMAIL_SENT', 'VERIFIED', 'STARTED', 'SUBMITTED', 'EXPIRED'].includes(status)
+      ) {
+        parts.push({ candidateStatus: status as Prisma.EnumCandidateStatusFilter['equals'] });
+      }
+    }
+  } else {
+    parts.push({
+      selectionStatus: { notIn: [SelectionStatus.REJECTED, SelectionStatus.SHORTLISTED] },
+    });
+    if (status) {
+      if (status.startsWith('ASSESSMENT_')) {
+        const assessmentStatus = status.replace(
+          'ASSESSMENT_',
+          ''
+        ) as Prisma.EnumCandidateAssessmentStatusFilter['equals'];
+        parts.push({ assessmentStatus });
+      } else if (
+        ['REGISTERED', 'EMAIL_SENT', 'VERIFIED', 'STARTED', 'SUBMITTED', 'EXPIRED'].includes(status)
+      ) {
+        parts.push({ candidateStatus: status as Prisma.EnumCandidateStatusFilter['equals'] });
+      }
     }
   }
 
@@ -210,7 +261,12 @@ export function buildCandidateListWhere(
     parts.push({ ownerAdminId: ownerFilter });
   }
 
-  if (filters.inactivityDays && [7, 30, 90].includes(filters.inactivityDays)) {
+  if (
+    filters.inactivityDays &&
+    Number.isInteger(filters.inactivityDays) &&
+    filters.inactivityDays >= 1 &&
+    filters.inactivityDays <= 365
+  ) {
     const { y, m, d } = getIstYmd();
     const cutoffDay = new Date(Date.UTC(y, m, d - filters.inactivityDays));
     const cutoff = istStartOfDayUtc(
@@ -357,5 +413,102 @@ export async function resolveCandidateIds(
       selection.mode === 'ALL_MATCHING'
         ? normalizeFilterSnapshot(selection.filters || {})
         : null,
+  };
+}
+
+/** Resolve IDs among soft-deleted candidates only (Deleted Candidates page). */
+export function buildDeletedCandidateListWhere(
+  filters: CandidateFilterSnapshot = {}
+): Prisma.CandidateProfileWhereInput {
+  const parts: Prisma.CandidateProfileWhereInput[] = [deletedCandidateWhere()];
+
+  const search = filters.search?.trim();
+  if (search) {
+    if (search.length > 200) {
+      throw new AppError(400, 'Search query is too long');
+    }
+    parts.push({
+      OR: [
+        { fullName: { contains: search, mode: 'insensitive' } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
+      ],
+    });
+  }
+
+  const roleId =
+    filters.jobRoleId ||
+    filters.role ||
+    (filters.roleAssignment &&
+    filters.roleAssignment !== 'all' &&
+    filters.roleAssignment !== 'assigned' &&
+    filters.roleAssignment !== 'unassigned' &&
+    filters.roleAssignment !== 'na'
+      ? filters.roleAssignment
+      : null);
+  if (roleId && roleId !== 'all') {
+    parts.push({
+      OR: [
+        { selectedRoleId: roleId },
+        { assessments: { some: { jobRoleId: roleId } } },
+        { submissions: { some: { assessment: { jobRoleId: roleId } } } },
+      ],
+    });
+  }
+
+  applyRegisteredDateFilter(parts, filters);
+
+  return mergeCandidateWhere(...parts);
+}
+
+export async function resolveDeletedCandidateIds(
+  selection: CandidateSelectionInput,
+  options: { maxIds?: number } = {}
+): Promise<{
+  ids: string[];
+  count: number;
+  filterSnapshot: CandidateFilterSnapshot | null;
+}> {
+  const maxIds = options.maxIds ?? DEFAULT_MAX_IDS;
+
+  if (selection.mode === 'IDS') {
+    const unique = [...new Set((selection.candidateIds || []).filter(Boolean))];
+    if (unique.length === 0) {
+      throw new AppError(400, 'No candidates selected');
+    }
+    if (unique.length > maxIds) {
+      throw new AppError(400, `Selection exceeds maximum of ${maxIds} candidates`);
+    }
+    const rows = await prisma.candidateProfile.findMany({
+      where: mergeCandidateWhere(deletedCandidateWhere(), { id: { in: unique } }),
+      select: { id: true },
+    });
+    if (rows.length === 0) {
+      throw new AppError(400, 'No candidates selected');
+    }
+    return { ids: rows.map((r) => r.id), count: rows.length, filterSnapshot: null };
+  }
+
+  const filterSnapshot = normalizeFilterSnapshot(selection.filters || {});
+  const where = buildDeletedCandidateListWhere(filterSnapshot);
+
+  const excluded = new Set(selection.excludedCandidateIds || []);
+  const rows = await prisma.candidateProfile.findMany({
+    where,
+    select: { id: true },
+    orderBy: [{ deletedAt: 'desc' }, { id: 'desc' }],
+    take: maxIds + 1,
+  });
+  const ids = rows.map((r) => r.id).filter((id) => !excluded.has(id));
+  if (ids.length === 0) {
+    throw new AppError(400, 'No candidates match the current filters');
+  }
+  if (ids.length > maxIds) {
+    throw new AppError(400, `Selection exceeds maximum of ${maxIds} candidates`);
+  }
+
+  return {
+    ids,
+    count: ids.length,
+    filterSnapshot,
   };
 }

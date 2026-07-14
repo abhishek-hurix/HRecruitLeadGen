@@ -1,4 +1,5 @@
-import { Download, X } from 'lucide-react';
+import { Download } from 'lucide-react';
+import { GlassModal, glassBtnSecondaryClass } from '../ui/GlassDialog';
 
 interface ResumePreviewModalProps {
   url: string;
@@ -8,29 +9,23 @@ interface ResumePreviewModalProps {
 
 export function ResumePreviewModal({ url, filename, onClose }: ResumePreviewModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between gap-4 border-b px-4 py-3">
-          <div>
-            <h2 className="font-semibold text-hurix-charcoal">Resume Preview</h2>
-            <p className="text-xs text-hurix-gray">{filename}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <a href={url} download={filename} className="btn-secondary flex items-center gap-2 px-3 py-2 text-xs">
-              <Download size={14} /> Download
-            </a>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg p-2 text-hurix-gray hover:bg-slate-100 hover:text-hurix-charcoal"
-              aria-label="Close resume preview"
-            >
-              <X size={18} />
-            </button>
-          </div>
-        </div>
-        <iframe src={url} title="Resume preview" className="h-full w-full bg-slate-100" />
+    <GlassModal
+      title="Resume Preview"
+      subtitle={filename}
+      onClose={onClose}
+      maxWidth="5xl"
+      className="flex h-[90vh] flex-col !overflow-hidden !p-4"
+    >
+      <div className="mb-3 flex justify-end">
+        <a href={url} download={filename} className={`${glassBtnSecondaryClass} h-9 gap-2 px-3 text-xs`}>
+          <Download size={14} /> Download
+        </a>
       </div>
-    </div>
+      <iframe
+        src={url}
+        title="Resume preview"
+        className="min-h-0 flex-1 w-full rounded-xl border border-white/70 bg-white/60"
+      />
+    </GlassModal>
   );
 }

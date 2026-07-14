@@ -65,7 +65,7 @@ const listFixture = {
       journeyStatus: 'VERIFIED',
       assessmentStatus: 'NOT_STARTED',
       score: null,
-      scoreLabel: 'No Assessment',
+      scoreLabel: 'NA',
       lastActivityAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     },
@@ -620,7 +620,7 @@ test.describe('Candidate Management phase 2', () => {
         data: listFixture.data.map((c, i) => ({
           ...c,
           score: i === 1 ? 7 : null,
-          scoreLabel: i === 1 ? '7/10' : 'No Assessment',
+          scoreLabel: i === 1 ? '7/10' : 'NA',
           roleLabel: i === 0 ? 'Not Assigned' : 'Engineer',
           owner: i === 0 ? null : { id: 'admin-1', email: 'admin@hurixdigital.com', role: 'SUPER_ADMIN' },
           lastActivityAt: new Date().toISOString(),
@@ -649,7 +649,7 @@ test.describe('Candidate Management phase 2', () => {
     const table = page.locator('table');
     await expect(page.getByRole('button', { name: /Sort by Name/i })).toBeVisible();
     await expect(table.getByText('Not Assigned').first()).toBeVisible();
-    await expect(table.getByText('No Assessment').first()).toBeVisible();
+    await expect(table.getByText('NA').first()).toBeVisible();
     await page.getByRole('button', { name: /Sort by Name/i }).click();
   });
 

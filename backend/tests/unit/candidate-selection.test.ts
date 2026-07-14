@@ -48,6 +48,32 @@ describe('candidate-selection.service', () => {
     });
   });
 
+  it('excludes rejected candidates from the main list by default', () => {
+    const where = buildCandidateListWhere({});
+    expect(where).toMatchObject({
+      AND: expect.arrayContaining([
+        { selectionStatus: { not: 'REJECTED' } },
+        { isTestUser: false },
+      ]),
+    });
+  });
+
+  it('lists only test users when isTestUser is true', () => {
+    const where = buildCandidateListWhere({ isTestUser: true });
+    expect(where).toMatchObject({
+      AND: expect.arrayContaining([{ isTestUser: true }]),
+    });
+    expect(JSON.stringify(where)).not.toContain('"not":"REJECTED"');
+  });
+
+  it('includes only rejected candidates when status is REJECTED', () => {
+    const where = buildCandidateListWhere({ status: 'REJECTED' });
+    expect(where).toMatchObject({
+      AND: expect.arrayContaining([{ selectionStatus: 'REJECTED' }]),
+    });
+    expect(JSON.stringify(where)).not.toContain('"not":"REJECTED"');
+  });
+
   it('rejects empty IDS selection', async () => {
     await expect(resolveCandidateIds({ mode: 'IDS', candidateIds: [] })).rejects.toBeInstanceOf(AppError);
   });

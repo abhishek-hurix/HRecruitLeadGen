@@ -18,7 +18,9 @@ import { candidateReferenceFromId } from '../utils/idempotency';
 import {
   CandidateSelectionInput,
   buildCandidateListWhere,
+  buildDeletedCandidateListWhere,
   resolveCandidateIds,
+  resolveDeletedCandidateIds,
   CandidateFilterSnapshot,
 } from './candidate-selection.service';
 import { assessmentTokenService } from './assessment-token.service';
@@ -279,6 +281,314 @@ export class CandidateBulkService {
     return finalizeBulkOperation(operationId, results, adminUserId, 'CANDIDATE_REJECTED');
   }
 
+  async restoreRejected(
+    selection: CandidateSelectionInput,
+    adminUserId: string,
+    meta?: { ipAddress?: string; userAgent?: string }
+  ): Promise<BulkOperationResult> {
+    const { ids, filterSnapshot } = await resolveCandidateIds(selection);
+    const operationId = await createBulkOperation({
+      action: BulkOperationAction.RESTORE,
+      adminUserId,
+      selection,
+      ids,
+      filterSnapshot,
+      metadata: { scope: 'REJECTED' },
+      ...meta,
+    });
+
+    const results: BulkResultItem[] = [];
+    for (const id of ids) {
+      try {
+        const current = await prisma.candidateProfile.findFirst({
+          where: mergeCandidateWhere(activeCandidateWhere(), {
+            id,
+            selectionStatus: SelectionStatus.REJECTED,
+          }),
+        });
+        if (!current) {
+          results.push({
+            candidateId: id,
+            status: 'failed',
+            code: 'NOT_FOUND',
+            message: 'Rejected candidate not found',
+          });
+          continue;
+        }
+
+        const restoredStatus =
+          current.previousSelectionStatus && current.previousSelectionStatus !== SelectionStatus.REJECTED
+            ? current.previousSelectionStatus
+            : SelectionStatus.PENDING;
+
+        await prisma.candidateProfile.update({
+          where: { id },
+          data: {
+            selectionStatus: restoredStatus,
+            previousSelectionStatus: null,
+            rejectionReason: null,
+            rejectedAt: null,
+            rejectedByAdminId: null,
+          },
+        });
+
+        const { touchCandidateActivity } = await import('./candidate-insight.service');
+        await touchCandidateActivity(id, CandidateActivityType.STATUS_CHANGED, {
+          actorAdminId: adminUserId,
+          operationId,
+          metadata: { action: 'REJECTION_RESTORED', restoredStatus },
+        }).catch(() => undefined);
+
+        results.push({ candidateId: id, status: 'succeeded' });
+      } catch (e) {
+        results.push({
+          candidateId: id,
+          status: 'failed',
+          code: 'RESTORE_REJECTED_FAILED',
+          message: e instanceof Error ? e.message : 'Restore failed',
+        });
+      }
+    }
+
+    return finalizeBulkOperation(operationId, results, adminUserId, 'CANDIDATE_REJECTION_RESTORED');
+  }
+
+  async shortlist(
+    selection: CandidateSelectionInput,
+    adminUserId: string,
+    meta?: { ipAddress?: string; userAgent?: string }
+  ): Promise<BulkOperationResult> {
+    const { ids, filterSnapshot } = await resolveCandidateIds(selection);
+    const operationId = await createBulkOperation({
+      action: BulkOperationAction.STATUS_CHANGE,
+      adminUserId,
+      selection,
+      ids,
+      filterSnapshot,
+      metadata: { selectionStatus: 'SHORTLISTED' },
+      ...meta,
+    });
+
+    const results: BulkResultItem[] = [];
+    for (const id of ids) {
+      try {
+        const current = await prisma.candidateProfile.findFirst({
+          where: mergeCandidateWhere(activeCandidateWhere(), {
+            id,
+            selectionStatus: { notIn: [SelectionStatus.SHORTLISTED, SelectionStatus.REJECTED] },
+          }),
+        });
+        if (!current) {
+          results.push({
+            candidateId: id,
+            status: 'failed',
+            code: 'NOT_FOUND',
+            message: 'Candidate not found or already shortlisted/rejected',
+          });
+          continue;
+        }
+
+        await prisma.candidateProfile.update({
+          where: { id },
+          data: {
+            previousSelectionStatus: current.selectionStatus,
+            selectionStatus: SelectionStatus.SHORTLISTED,
+          },
+        });
+
+        const { touchCandidateActivity } = await import('./candidate-insight.service');
+        await touchCandidateActivity(id, CandidateActivityType.STATUS_CHANGED, {
+          actorAdminId: adminUserId,
+          operationId,
+          metadata: { action: 'SHORTLISTED', from: current.selectionStatus },
+        }).catch(() => undefined);
+
+        results.push({ candidateId: id, status: 'succeeded' });
+      } catch (e) {
+        results.push({
+          candidateId: id,
+          status: 'failed',
+          code: 'SHORTLIST_FAILED',
+          message: e instanceof Error ? e.message : 'Shortlist failed',
+        });
+      }
+    }
+
+    return finalizeBulkOperation(operationId, results, adminUserId, 'CANDIDATE_SHORTLISTED');
+  }
+
+  async restoreShortlisted(
+    selection: CandidateSelectionInput,
+    adminUserId: string,
+    meta?: { ipAddress?: string; userAgent?: string }
+  ): Promise<BulkOperationResult> {
+    const { ids, filterSnapshot } = await resolveCandidateIds(selection);
+    const operationId = await createBulkOperation({
+      action: BulkOperationAction.RESTORE,
+      adminUserId,
+      selection,
+      ids,
+      filterSnapshot,
+      metadata: { scope: 'SHORTLISTED' },
+      ...meta,
+    });
+
+    const results: BulkResultItem[] = [];
+    for (const id of ids) {
+      try {
+        const current = await prisma.candidateProfile.findFirst({
+          where: mergeCandidateWhere(activeCandidateWhere(), {
+            id,
+            selectionStatus: SelectionStatus.SHORTLISTED,
+          }),
+        });
+        if (!current) {
+          results.push({
+            candidateId: id,
+            status: 'failed',
+            code: 'NOT_FOUND',
+            message: 'Shortlisted candidate not found',
+          });
+          continue;
+        }
+
+        const restoredStatus =
+          current.previousSelectionStatus &&
+          current.previousSelectionStatus !== SelectionStatus.SHORTLISTED &&
+          current.previousSelectionStatus !== SelectionStatus.REJECTED
+            ? current.previousSelectionStatus
+            : SelectionStatus.PENDING;
+
+        await prisma.candidateProfile.update({
+          where: { id },
+          data: {
+            selectionStatus: restoredStatus,
+            previousSelectionStatus: null,
+          },
+        });
+
+        const { touchCandidateActivity } = await import('./candidate-insight.service');
+        await touchCandidateActivity(id, CandidateActivityType.STATUS_CHANGED, {
+          actorAdminId: adminUserId,
+          operationId,
+          metadata: { action: 'SHORTLIST_RESTORED', restoredStatus },
+        }).catch(() => undefined);
+
+        results.push({ candidateId: id, status: 'succeeded' });
+      } catch (e) {
+        results.push({
+          candidateId: id,
+          status: 'failed',
+          code: 'RESTORE_SHORTLISTED_FAILED',
+          message: e instanceof Error ? e.message : 'Restore failed',
+        });
+      }
+    }
+
+    return finalizeBulkOperation(operationId, results, adminUserId, 'CANDIDATE_SHORTLIST_RESTORED');
+  }
+
+  async markAsTestUsers(
+    selection: CandidateSelectionInput,
+    adminUserId: string,
+    meta?: { ipAddress?: string; userAgent?: string }
+  ): Promise<BulkOperationResult> {
+    const { ids, filterSnapshot } = await resolveCandidateIds(selection);
+    const operationId = await createBulkOperation({
+      action: BulkOperationAction.STATUS_CHANGE,
+      adminUserId,
+      selection,
+      ids,
+      filterSnapshot,
+      metadata: { markTestUser: true },
+      ...meta,
+    });
+
+    const results: BulkResultItem[] = [];
+    for (const id of ids) {
+      try {
+        const current = await prisma.candidateProfile.findFirst({
+          where: mergeCandidateWhere(activeCandidateWhere(), { id, isTestUser: false }),
+        });
+        if (!current) {
+          results.push({
+            candidateId: id,
+            status: 'failed',
+            code: 'NOT_FOUND',
+            message: 'Candidate not found or already a test user',
+          });
+          continue;
+        }
+        await prisma.candidateProfile.update({
+          where: { id },
+          data: { isTestUser: true },
+        });
+        results.push({ candidateId: id, status: 'succeeded' });
+      } catch (e) {
+        results.push({
+          candidateId: id,
+          status: 'failed',
+          code: 'MARK_TEST_FAILED',
+          message: e instanceof Error ? e.message : 'Failed to mark as test user',
+        });
+      }
+    }
+
+    return finalizeBulkOperation(operationId, results, adminUserId, 'CANDIDATE_MARKED_TEST_USER');
+  }
+
+  async removeFromTestUsers(
+    selection: CandidateSelectionInput,
+    adminUserId: string,
+    meta?: { ipAddress?: string; userAgent?: string }
+  ): Promise<BulkOperationResult> {
+    if (selection.mode === 'ALL_MATCHING') {
+      selection.filters = { ...(selection.filters || {}), isTestUser: true };
+    }
+    const { ids, filterSnapshot } = await resolveCandidateIds(selection);
+    const operationId = await createBulkOperation({
+      action: BulkOperationAction.RESTORE,
+      adminUserId,
+      selection,
+      ids,
+      filterSnapshot,
+      metadata: { removeTestUser: true },
+      ...meta,
+    });
+
+    const results: BulkResultItem[] = [];
+    for (const id of ids) {
+      try {
+        const current = await prisma.candidateProfile.findFirst({
+          where: mergeCandidateWhere(activeCandidateWhere(), { id, isTestUser: true }),
+        });
+        if (!current) {
+          results.push({
+            candidateId: id,
+            status: 'failed',
+            code: 'NOT_FOUND',
+            message: 'Test user not found',
+          });
+          continue;
+        }
+        await prisma.candidateProfile.update({
+          where: { id },
+          data: { isTestUser: false },
+        });
+        results.push({ candidateId: id, status: 'succeeded' });
+      } catch (e) {
+        results.push({
+          candidateId: id,
+          status: 'failed',
+          code: 'REMOVE_TEST_FAILED',
+          message: e instanceof Error ? e.message : 'Failed to remove test user flag',
+        });
+      }
+    }
+
+    return finalizeBulkOperation(operationId, results, adminUserId, 'CANDIDATE_REMOVED_FROM_TEST_USERS');
+  }
+
   async assignRole(
     selection: CandidateSelectionInput,
     jobRoleId: string,
@@ -402,6 +712,87 @@ export class CandidateBulkService {
     return finalizeBulkOperation(operationId, results, adminUserId, 'CANDIDATE_SOFT_DELETED');
   }
 
+  async restoreBulk(
+    selection: CandidateSelectionInput,
+    adminUserId: string,
+    meta?: { ipAddress?: string; userAgent?: string }
+  ): Promise<BulkOperationResult> {
+    const { ids, filterSnapshot } = await resolveDeletedCandidateIds(selection);
+    const operationId = await createBulkOperation({
+      action: BulkOperationAction.RESTORE,
+      adminUserId,
+      selection,
+      ids,
+      filterSnapshot,
+      ...meta,
+    });
+
+    const results: BulkResultItem[] = [];
+    for (const id of ids) {
+      try {
+        const current = await prisma.candidateProfile.findFirst({
+          where: mergeCandidateWhere(deletedCandidateWhere(), { id }),
+        });
+        if (!current) {
+          results.push({ candidateId: id, status: 'failed', code: 'NOT_FOUND', message: 'Deleted candidate not found' });
+          continue;
+        }
+        await prisma.candidateProfile.update({
+          where: { id },
+          data: {
+            deletedAt: null,
+            deletedByAdminId: null,
+            restoredAt: new Date(),
+            restoredByAdminId: adminUserId,
+          },
+        });
+        results.push({ candidateId: id, status: 'succeeded' });
+      } catch (e) {
+        results.push({
+          candidateId: id,
+          status: 'failed',
+          code: 'RESTORE_FAILED',
+          message: e instanceof Error ? e.message : 'Restore failed',
+        });
+      }
+    }
+
+    return finalizeBulkOperation(operationId, results, adminUserId, 'CANDIDATE_RESTORED');
+  }
+
+  async permanentDeleteBulk(
+    selection: CandidateSelectionInput,
+    adminUserId: string,
+    meta?: { ipAddress?: string; userAgent?: string }
+  ): Promise<BulkOperationResult> {
+    const { ids, filterSnapshot } = await resolveDeletedCandidateIds(selection);
+    const operationId = await createBulkOperation({
+      action: BulkOperationAction.PERMANENT_DELETE,
+      adminUserId,
+      selection,
+      ids,
+      filterSnapshot,
+      ...meta,
+    });
+
+    const results: BulkResultItem[] = [];
+    for (const id of ids) {
+      try {
+        await this.permanentDelete(id, adminUserId);
+        results.push({ candidateId: id, status: 'succeeded' });
+      } catch (e) {
+        results.push({
+          candidateId: id,
+          status: 'failed',
+          code: 'PERMANENT_DELETE_FAILED',
+          message: e instanceof Error ? e.message : 'Permanent delete failed',
+        });
+      }
+    }
+
+    return finalizeBulkOperation(operationId, results, adminUserId, 'CANDIDATE_PERMANENTLY_DELETED');
+  }
+
   async restore(candidateId: string, adminUserId: string): Promise<{ id: string }> {
     const candidate = await prisma.candidateProfile.findFirst({
       where: mergeCandidateWhere(deletedCandidateWhere(), { id: candidateId }),
@@ -488,24 +879,25 @@ export class CandidateBulkService {
 
   async listDeleted(params: {
     search?: string;
+    role?: string;
+    registeredFrom?: string;
+    registeredTo?: string;
+    datePreset?: string;
     page?: number;
     pageSize?: number;
   }) {
     const page = Math.max(1, params.page || 1);
-    const pageSize = [25, 50, 100].includes(params.pageSize || 0) ? params.pageSize! : 25;
+    const pageSize = [5, 10, 20, 30, 50, 100].includes(params.pageSize || 0) ? params.pageSize! : 10;
     const skip = (page - 1) * pageSize;
 
-    const where = mergeCandidateWhere(
-      deletedCandidateWhere(),
-      params.search?.trim()
-        ? {
-            OR: [
-              { fullName: { contains: params.search.trim(), mode: 'insensitive' } },
-              { user: { email: { contains: params.search.trim(), mode: 'insensitive' } } },
-            ],
-          }
-        : undefined
-    );
+    const where = buildDeletedCandidateListWhere({
+      search: params.search,
+      role: params.role || null,
+      jobRoleId: params.role || null,
+      registeredFrom: params.registeredFrom || null,
+      registeredTo: params.registeredTo || null,
+      datePreset: (params.datePreset as CandidateFilterSnapshot['datePreset']) || null,
+    });
 
     const [rows, total] = await Promise.all([
       prisma.candidateProfile.findMany({

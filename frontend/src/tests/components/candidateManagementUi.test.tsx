@@ -17,7 +17,6 @@ describe('BulkActionToolbar', () => {
         onSendReminder={() => {}}
         onAssignRole={() => {}}
         onReject={() => {}}
-        onScheduleInterview={() => {}}
         onExport={() => {}}
         onDelete={() => {}}
         onClear={() => {}}
@@ -34,7 +33,6 @@ describe('BulkActionToolbar', () => {
         onSendReminder={() => {}}
         onAssignRole={() => {}}
         onReject={() => {}}
-        onScheduleInterview={() => {}}
         onExport={() => {}}
         onDelete={() => {}}
         onClear={() => {}}
@@ -55,7 +53,6 @@ describe('BulkActionToolbar', () => {
         onSendReminder={() => {}}
         onAssignRole={() => {}}
         onReject={() => {}}
-        onScheduleInterview={() => {}}
         onExport={() => {}}
         onDelete={() => {}}
         onClear={() => {}}

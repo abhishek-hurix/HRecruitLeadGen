@@ -16,7 +16,7 @@ export function SortableTh({ label, column, sortBy, sortOrder, onSort, className
   const ariaSort = !active ? 'none' : sortOrder === 'asc' ? 'ascending' : 'descending';
   return (
     <th
-      className={`px-2 py-3 text-left font-semibold ${className}`}
+      className={`px-1.5 py-2.5 text-left font-semibold ${className}`}
       aria-sort={ariaSort}
       scope="col"
     >

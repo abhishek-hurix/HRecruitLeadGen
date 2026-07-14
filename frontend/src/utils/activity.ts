@@ -11,6 +11,18 @@ export function formatIstDateTime(iso: string | Date | null | undefined): string
   }).format(d);
 }
 
+export function formatIstDate(iso: string | Date | null | undefined): string {
+  if (!iso) return '—';
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (Number.isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(d);
+}
+
 export function formatRelativeTime(iso: string | Date | null | undefined, now = new Date()): string {
   if (!iso) return '—';
   const d = typeof iso === 'string' ? new Date(iso) : iso;

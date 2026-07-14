@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { getScoreBreakdown } from '../../api/admin';
 import { formatIstDateTime } from '../../utils/activity';
 import { getAdminActionErrorMessage } from '../../utils/apiErrors';
+import { glassCloseBtnClass, glassOverlayClass } from '../ui/GlassDialog';
 
 interface ScoreBreakdownDrawerProps {
   candidateId: string;
@@ -20,20 +21,20 @@ export function ScoreBreakdownDrawer({ candidateId, onClose }: ScoreBreakdownDra
   const questions = data?.questionResults ?? data?.questions ?? [];
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/30" role="dialog" aria-modal="true">
+    <div className={`${glassOverlayClass} !justify-end !p-0`} role="dialog" aria-modal="true">
       <button type="button" className="flex-1 cursor-default" aria-label="Close score breakdown" onClick={onClose} />
-      <aside className="w-full max-w-md h-full bg-white shadow-xl overflow-y-auto p-5">
-        <div className="flex items-start justify-between mb-4">
+      <aside className="h-full w-full max-w-md overflow-y-auto border-l border-white/70 bg-white/90 p-5 text-neutral-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),-12px_0_40px_rgba(0,0,0,0.18)] backdrop-blur-2xl">
+        <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-bold text-hurix-charcoal">Score breakdown</h2>
+            <h2 className="text-lg font-semibold tracking-tight text-neutral-950">Score breakdown</h2>
             {data && (
-              <p className="text-xs text-hurix-gray mt-1">
+              <p className="mt-1 text-xs text-neutral-500">
                 {data.fullName} · {data.applicationId}
               </p>
             )}
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-hurix-gray hover:text-hurix-charcoal">
-            <X size={20} />
+          <button type="button" onClick={onClose} aria-label="Close" className={glassCloseBtnClass}>
+            <X size={16} />
           </button>
         </div>
 

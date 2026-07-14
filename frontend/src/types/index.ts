@@ -76,6 +76,7 @@ export interface Candidate {
   selectionStatus?: SelectionStatus;
   rejectionReason?: string | null;
   rejectedAt?: string | null;
+  rejectedBy?: string | null;
   deletedAt?: string | null;
   submittedAt: string | null;
   createdAt: string;
@@ -83,6 +84,15 @@ export interface Candidate {
   lastActivityType?: string | null;
   ownerAdminId?: string | null;
   owner?: {
+    id: string;
+    email: string;
+    role: string;
+  } | null;
+  isTestUser?: boolean;
+  creationSource?: 'SELF_REGISTERED' | 'ADMIN_CREATED';
+  createdByAdminId?: string | null;
+  addedBy?: string | null;
+  createdByAdmin?: {
     id: string;
     email: string;
     role: string;

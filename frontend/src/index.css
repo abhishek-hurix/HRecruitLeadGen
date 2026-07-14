@@ -21,6 +21,80 @@
   .input-field {
     @apply w-full px-4 py-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-hurix-blue/30 focus:border-hurix-blue transition-colors;
   }
+
+  /* White–black frosted glass controls (Candidates filters) */
+  .filter-glass {
+    @apply w-full h-11 px-3.5 pr-9 rounded-2xl text-[13px] font-medium tracking-tight text-neutral-900
+      bg-white/55 border border-white/70
+      shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_6px_20px_rgba(0,0,0,0.05)]
+      backdrop-blur-xl
+      focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-black/25
+      hover:bg-white/75
+      transition-[background-color,box-shadow,border-color] duration-200;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23171717' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.85rem center;
+    background-size: 0.75rem;
+  }
+
+  .filter-glass-btn {
+    @apply w-full h-11 px-3.5 rounded-2xl text-[13px] font-medium tracking-tight text-neutral-900
+      bg-white/55 border border-white/70
+      shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_6px_20px_rgba(0,0,0,0.05)]
+      backdrop-blur-xl
+      focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-black/25
+      hover:bg-white/75
+      transition-[background-color,box-shadow,border-color] duration-200;
+  }
+
+  .filter-glass-panel {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-[0_16px_40px_rgba(0,0,0,0.14)];
+  }
+
+  .filter-chip {
+    @apply rounded-full px-3.5 py-1.5 text-xs font-medium tracking-tight text-neutral-700
+      bg-white/55 border border-white/70
+      shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_2px_8px_rgba(0,0,0,0.04)]
+      backdrop-blur-xl
+      hover:bg-white/80 hover:text-neutral-950
+      transition-[background-color,color,box-shadow] duration-200;
+  }
+
+  .filter-chip-active {
+    @apply rounded-full px-3.5 py-1.5 text-xs font-medium tracking-tight text-white
+      bg-neutral-950 border border-neutral-950
+      shadow-[0_4px_14px_rgba(0,0,0,0.18)]
+      hover:bg-neutral-800 hover:text-white;
+  }
+
+  .filter-tray {
+    @apply rounded-[1.35rem] border border-white/60 bg-white/35 p-3 sm:p-4
+      shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_10px_32px_rgba(0,0,0,0.05)]
+      backdrop-blur-xl;
+  }
+
+  .action-glass {
+    @apply inline-flex h-6 items-center justify-center gap-0.5 rounded-md px-1.5
+      text-[10px] font-medium tracking-tight text-neutral-800
+      border border-white/70 bg-white/65
+      shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_4px_rgba(0,0,0,0.04)]
+      backdrop-blur-md
+      hover:bg-white hover:text-neutral-950
+      transition-[background-color,color,box-shadow] duration-150
+      disabled:opacity-45 disabled:pointer-events-none;
+  }
+
+  .action-glass-icon {
+    @apply inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md
+      text-neutral-800
+      border border-white/70 bg-white/65
+      shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_4px_rgba(0,0,0,0.04)]
+      backdrop-blur-md
+      hover:bg-white hover:text-neutral-950
+      transition-[background-color,color,box-shadow] duration-150
+      disabled:opacity-45 disabled:pointer-events-none;
+  }
 }
 
 @layer utilities {

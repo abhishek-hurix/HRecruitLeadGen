@@ -218,6 +218,8 @@ model CandidateProfile {
   sourceDetail                    String?                   @map("source_detail")
   creationSource                  CandidateCreationSource   @default(SELF_REGISTERED) @map("creation_source")
   createdByAdminId                String?                   @map("created_by_admin_id")
+  /// QA / sandbox profiles — listed under Test Users, excluded from main Candidates.
+  isTestUser                      Boolean                   @default(false) @map("is_test_user")
   emailVerified                   Boolean                   @default(false) @map("email_verified")
   emailVerifiedAt                 DateTime?                 @map("email_verified_at")
   verificationSentAt              DateTime?                 @map("verification_sent_at")
@@ -303,6 +305,7 @@ model CandidateProfile {
   @@index([lastActivityAt, deletedAt])
   @@index([creationSource])
   @@index([createdByAdminId])
+  @@index([isTestUser, deletedAt])
   @@map("candidate_profiles")
 }
 
@@ -579,6 +582,8 @@ model AdminUser {
   reminderTemplates        EmailReminderTemplate[]
   reminderTemplatesUpdated EmailReminderTemplate[] @relation("ReminderTemplateUpdatedBy")
   reminderDeliveries       EmailReminderDelivery[]
+  whatsappTemplates        WhatsAppMessageTemplate[]
+  whatsappTemplatesUpdated WhatsAppMessageTemplate[] @relation("WhatsAppTemplateUpdatedBy")
   interviewsScheduled      CandidateInterview[]
   googleCalendars          AdminGoogleCalendar[]
   idempotencyRecords       IdempotencyRecord[]
@@ -708,6 +713,23 @@ model EmailReminderTemplate {
   @@index([isActive])
   @@index([type, isActive])
   @@map("email_reminder_templates")
+}
+
+model WhatsAppMessageTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  bodyText    String   @map("body_text") @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdById String?  @map("created_by_id")
+  updatedById String?  @map("updated_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  createdBy AdminUser? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy AdminUser? @relation("WhatsAppTemplateUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([isActive])
+  @@map("whatsapp_message_templates")
 }
 
 model EmailReminderDelivery {

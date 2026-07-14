@@ -49,9 +49,23 @@ import {
   bulkReject,
   bulkAssignRole,
   bulkSoftDelete,
+  bulkRestoreDeleted,
+  bulkRestoreRejected,
+  bulkShortlist,
+  bulkRestoreShortlisted,
+  bulkMarkTestUsers,
+  bulkRemoveTestUsers,
+  bulkPermanentDelete,
   bulkSendReminders,
   listReminderTemplates,
   previewReminder,
+  createReminderTemplate,
+  updateReminderTemplate,
+  deleteReminderTemplate,
+  listWhatsAppTemplates,
+  createWhatsAppTemplate,
+  updateWhatsAppTemplate,
+  deleteWhatsAppTemplate,
   exportCandidates,
   listDeletedCandidates,
   getDeletedCandidate,
@@ -154,10 +168,54 @@ router.post('/candidates/bulk/status', bulkActionLimiter, requirePermission(Perm
 router.post('/candidates/bulk/reminders', bulkActionLimiter, requirePermission(Permission.MANAGE_CANDIDATES), bulkSendReminders);
 router.post('/candidates/bulk/assign-role', bulkActionLimiter, requirePermission(Permission.MANAGE_CANDIDATES), bulkAssignRole);
 router.post('/candidates/bulk/reject', bulkActionLimiter, requirePermission(Permission.MANAGE_CANDIDATES), bulkReject);
+router.post('/candidates/bulk/shortlist', bulkActionLimiter, requirePermission(Permission.MANAGE_CANDIDATES), bulkShortlist);
 router.post('/candidates/bulk/delete', bulkActionLimiter, requirePermission(Permission.MANAGE_CANDIDATES), bulkSoftDelete);
+router.post(
+  '/candidates/bulk/restore-rejected',
+  bulkActionLimiter,
+  requireRole(AdminRole.SUPER_ADMIN),
+  bulkRestoreRejected
+);
+router.post(
+  '/candidates/bulk/restore-shortlisted',
+  bulkActionLimiter,
+  requireRole(AdminRole.SUPER_ADMIN),
+  bulkRestoreShortlisted
+);
+router.post(
+  '/candidates/bulk/mark-test-users',
+  bulkActionLimiter,
+  requirePermission(Permission.MANAGE_CANDIDATES),
+  bulkMarkTestUsers
+);
+router.post(
+  '/candidates/bulk/remove-test-users',
+  bulkActionLimiter,
+  requireRole(AdminRole.SUPER_ADMIN),
+  bulkRemoveTestUsers
+);
+router.post(
+  '/deleted-candidates/bulk/restore',
+  bulkActionLimiter,
+  requireRole(AdminRole.SUPER_ADMIN),
+  bulkRestoreDeleted
+);
+router.post(
+  '/deleted-candidates/bulk/permanent',
+  bulkActionLimiter,
+  requirePermission(Permission.PERMANENTLY_DELETE_CANDIDATES),
+  bulkPermanentDelete
+);
 router.post('/candidates/bulk/schedule-interview', bulkActionLimiter, requirePermission(Permission.MANAGE_CANDIDATES), scheduleInterview);
 router.get('/reminder-templates', requirePermission(Permission.MANAGE_CANDIDATES), listReminderTemplates);
+router.post('/reminder-templates', requirePermission(Permission.MANAGE_CANDIDATES), createReminderTemplate);
+router.put('/reminder-templates/:id', requirePermission(Permission.MANAGE_CANDIDATES), updateReminderTemplate);
+router.delete('/reminder-templates/:id', requirePermission(Permission.MANAGE_CANDIDATES), deleteReminderTemplate);
 router.post('/reminder-templates/preview', requirePermission(Permission.MANAGE_CANDIDATES), previewReminder);
+router.get('/whatsapp-templates', requirePermission(Permission.MANAGE_CANDIDATES), listWhatsAppTemplates);
+router.post('/whatsapp-templates', requirePermission(Permission.MANAGE_CANDIDATES), createWhatsAppTemplate);
+router.put('/whatsapp-templates/:id', requirePermission(Permission.MANAGE_CANDIDATES), updateWhatsAppTemplate);
+router.delete('/whatsapp-templates/:id', requirePermission(Permission.MANAGE_CANDIDATES), deleteWhatsAppTemplate);
 router.get('/calendar/status', requirePermission(Permission.MANAGE_CANDIDATES), getCalendarStatus);
 
 router.get('/deleted-candidates', requirePermission(Permission.VIEW_DELETED_CANDIDATES), listDeletedCandidates);
@@ -166,7 +224,11 @@ router.get(
   requirePermission(Permission.VIEW_DELETED_CANDIDATES),
   getDeletedCandidate
 );
-router.post('/deleted-candidates/:candidateId/restore', requirePermission(Permission.VIEW_DELETED_CANDIDATES), restoreCandidate);
+router.post(
+  '/deleted-candidates/:candidateId/restore',
+  requireRole(AdminRole.SUPER_ADMIN),
+  restoreCandidate
+);
 router.delete(
   '/deleted-candidates/:candidateId/permanent',
   requirePermission(Permission.PERMANENTLY_DELETE_CANDIDATES),

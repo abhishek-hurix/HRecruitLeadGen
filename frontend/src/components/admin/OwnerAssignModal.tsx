@@ -2,6 +2,12 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getCandidateOwners } from '../../api/admin';
 import type { CandidateOwner } from '../../types/candidate-management';
+import {
+  GlassModal,
+  glassBtnPrimaryClass,
+  glassBtnSecondaryClass,
+  glassFieldClass,
+} from '../ui/GlassDialog';
 
 interface OwnerAssignModalProps {
   candidateName: string;
@@ -38,44 +44,43 @@ export function OwnerAssignModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
-        <h2 className="text-lg font-bold text-hurix-charcoal">
-          {currentOwner ? 'Reassign Owner' : 'Assign Owner'}
-        </h2>
-        <p className="mt-1 text-sm text-hurix-gray">
-          Assign a primary owner for <span className="font-medium text-hurix-charcoal">{candidateName}</span>.
+    <GlassModal
+      title={currentOwner ? 'Reassign Owner' : 'Assign Owner'}
+      subtitle={`Assign a primary owner for ${candidateName}.`}
+      onClose={onClose}
+      maxWidth="md"
+    >
+      <label className="mb-1 block text-sm font-medium text-neutral-800">Owner</label>
+      <select
+        className={glassFieldClass}
+        style={{ backgroundImage: 'none', paddingRight: '0.875rem' }}
+        value={ownerId}
+        onChange={(e) => setOwnerId(e.target.value)}
+        disabled={isLoading || busy}
+        aria-label="Select owner admin"
+      >
+        <option value="">Unassigned</option>
+        {owners.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.email} ({o.role.replace(/_/g, ' ')})
+          </option>
+        ))}
+      </select>
+
+      {error && (
+        <p className="mt-2 text-center text-sm text-red-600" role="alert">
+          {error}
         </p>
+      )}
 
-        <label className="mt-4 block text-sm font-medium">Owner</label>
-        <select
-          className="input-field mt-1"
-          value={ownerId}
-          onChange={(e) => setOwnerId(e.target.value)}
-          disabled={isLoading || busy}
-          aria-label="Select owner admin"
-        >
-          <option value="">Unassigned</option>
-          {owners.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.email} ({o.role.replace(/_/g, ' ')})
-            </option>
-          ))}
-        </select>
-
-        {error && (
-          <p className="mt-2 text-sm text-red-600" role="alert">{error}</p>
-        )}
-
-        <div className="mt-5 flex justify-end gap-2">
-          <button type="button" className="btn-secondary text-sm" onClick={onClose} disabled={busy}>
-            Cancel
-          </button>
-          <button type="button" className="btn-primary text-sm" onClick={submit} disabled={busy}>
-            {busy ? 'Saving…' : 'Confirm'}
-          </button>
-        </div>
+      <div className="mt-5 flex flex-wrap justify-center gap-3">
+        <button type="button" className={glassBtnSecondaryClass} onClick={onClose} disabled={busy}>
+          Cancel
+        </button>
+        <button type="button" className={glassBtnPrimaryClass} onClick={submit} disabled={busy}>
+          {busy ? 'Saving…' : 'Confirm'}
+        </button>
       </div>
-    </div>
+    </GlassModal>
   );
 }

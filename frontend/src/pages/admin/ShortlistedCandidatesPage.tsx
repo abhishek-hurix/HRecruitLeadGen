@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download, ClipboardList, Copy, Phone, UserPlus, ChevronLeft, ChevronRight, Eye, FileText, Mail, Briefcase, UserX, Trash2, FlaskConical, ListChecks } from 'lucide-react';
+import { Download, ClipboardList, Copy, Phone, ChevronLeft, ChevronRight, Eye, FileText, UserX, Trash2, RotateCcw } from 'lucide-react';
 import { LinkedInBrandIcon, WhatsAppBrandIcon } from '../../components/ui/BrandSocialIcons';
 import { Link } from 'react-router-dom';
 import { ResumePreviewModal } from '../../components/admin/ResumePreviewModal';
@@ -10,16 +10,11 @@ import { SortableTh } from '../../components/admin/SortableTh';
 import { ScoreBreakdownDrawer } from '../../components/admin/ScoreBreakdownDrawer';
 import { OwnerAssignModal } from '../../components/admin/OwnerAssignModal';
 import { TruncatedText } from '../../components/ui/TruncatedText';
+import { GlassDialog } from '../../components/ui/GlassDialog';
 import {
-  AssignRoleModal,
   DeleteConfirmModal,
   ExportModal,
-  InterviewModal,
-  MarkTestUsersModal,
   RejectModal,
-  ReminderModal,
-  ShortlistModal,
-  StatusChangeModal,
   WhatsAppSendModal,
 } from '../../components/admin/CandidateActionModals';
 import { AdminLayout } from '../../components/layout/AdminLayout';
@@ -30,14 +25,9 @@ import {
   exportCandidatesAdvanced,
   getJobRoles,
   getResumePreviewUrl,
-  bulkChangeStatus,
   bulkReject,
-  bulkShortlist,
-  bulkAssignRole,
   bulkSoftDelete,
-  bulkSendReminders,
-  scheduleInterview,
-  bulkMarkTestUsers,
+  bulkRestoreShortlisted,
   type BulkResult,
   type SelectionPayload,
 } from '../../api/admin';
@@ -56,19 +46,14 @@ import type { Candidate } from '../../types';
 
 type ModalKind =
   | null
-  | 'status'
   | 'reject'
-  | 'shortlist'
-  | 'role'
-  | 'reminder'
+  | 'remove'
   | 'delete'
-  | 'testUser'
-  | 'interview'
   | 'export';
 
-export function CandidatesPage() {
+export function ShortlistedCandidatesPage() {
   const queryClient = useQueryClient();
-  const { hasPermission } = useAdminAuth();
+  const { hasPermission, isSuperAdmin } = useAdminAuth();
   const canManage = hasPermission('manage_candidates');
   const canExport = hasPermission('export_candidates');
 
@@ -98,9 +83,8 @@ export function CandidatesPage() {
   const [ownerModalCandidate, setOwnerModalCandidate] = useState<Candidate | null>(null);
   const [whatsappCandidate, setWhatsappCandidate] = useState<Candidate | null>(null);
   const [scoreCandidateId, setScoreCandidateId] = useState<string | null>(null);
-  const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
   const [busy, setBusy] = useState(false);
-  const [busyAction, setBusyAction] = useState<'status' | 'reminder' | 'role' | 'reject' | 'shortlist' | 'interview' | 'export' | 'delete' | 'testUser' | null>(null);
+  const [busyAction, setBusyAction] = useState<'reject' | 'remove' | 'export' | 'delete' | null>(null);
   const [listError, setListError] = useState<{ message: string; requestId?: string } | null>(null);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const headerMenuRef = useRef<HTMLDivElement>(null);
@@ -116,7 +100,7 @@ export function CandidatesPage() {
   const filters = useMemo(
     () => ({
       search,
-      status: '',
+      status: 'SHORTLISTED',
       experience,
       country: '',
       countryCodes,
@@ -160,7 +144,7 @@ export function CandidatesPage() {
 
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: [
-      'candidates',
+      'shortlisted-candidates',
       search,
       experience,
       countryCodes,
@@ -178,6 +162,7 @@ export function CandidatesPage() {
     queryFn: () =>
       getCandidates({
         search,
+        status: 'SHORTLISTED',
         experience,
         countryCodes: countryCodes.length ? countryCodes : undefined,
         minScore:
@@ -265,8 +250,11 @@ export function CandidatesPage() {
   const actionCount = actionTarget === 'bulk' ? selection.effectiveCount : 1;
 
   const refreshAfterMutation = async (result: BulkResult, clearAfter = false) => {
-    setBulkResult(result);
+    void result;
+    await queryClient.invalidateQueries({ queryKey: ['shortlisted-candidates'] });
     await queryClient.invalidateQueries({ queryKey: ['candidates'] });
+    await queryClient.invalidateQueries({ queryKey: ['rejected-candidates'] });
+    await queryClient.invalidateQueries({ queryKey: ['deleted-candidates'] });
     await queryClient.invalidateQueries({ queryKey: ['test-users'] });
     await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     if (clearAfter) selection.clearSelection();
@@ -497,6 +485,21 @@ export function CandidatesPage() {
   }, [hasActiveFilters, totalMatching]);
   const listTotal = hasActiveFilters ? listTotalRef.current : totalMatching;
 
+  const emptyState = (
+    <div className="space-y-3 text-center text-hurix-gray">
+      <p>
+        {hasActiveFilters
+          ? 'No shortlisted candidates match the current filters.'
+          : 'No candidates available.'}
+      </p>
+      {hasActiveFilters && (
+        <button type="button" className="btn-secondary text-sm" onClick={clearAllFilters}>
+          Clear All Filters
+        </button>
+      )}
+    </div>
+  );
+
   const handleSort = (column: string) => {
     const next = cycleSort(sortBy, sortOrder, column);
     setSortBy(next.sortBy);
@@ -506,7 +509,7 @@ export function CandidatesPage() {
 
   const filterSnapshot = {
     search: search || undefined,
-    status: null,
+    status: 'SHORTLISTED',
     experience: experience || null,
     country: null,
     countryCodes: countryCodes.length ? countryCodes : null,
@@ -526,15 +529,34 @@ export function CandidatesPage() {
     sortOrder: sortOrder || null,
   };
 
+  const shortlistedBaseFilters = {
+    status: 'SHORTLISTED',
+    experience: null,
+    country: null,
+    countryCodes: null,
+    minScore: null,
+    role: null,
+    roleAssignment: null,
+    registeredFrom: null,
+    registeredTo: null,
+    datePreset: null,
+    ownerId: null,
+    inactivityDays: null,
+    sortBy: null,
+    sortOrder: null,
+  };
+
   const runExport = async (scope: 'SELECTED' | 'FILTERED' | 'ALL_ACTIVE', format: 'csv' | 'xlsx') => {
     setBusy(true);
     setBusyAction('export');
     try {
+      // "All shortlisted" uses FILTERED + base tab filters (not global ALL_ACTIVE).
+      const exportScope = scope === 'ALL_ACTIVE' ? 'FILTERED' : scope;
       await exportCandidatesAdvanced({
-        scope,
+        scope: exportScope,
         format,
         selection: scope === 'SELECTED' ? selection.toPayload() : undefined,
-        filters: filterSnapshot,
+        filters: scope === 'ALL_ACTIVE' ? shortlistedBaseFilters : filterSnapshot,
       });
     } finally {
       setBusy(false);
@@ -614,7 +636,7 @@ export function CandidatesPage() {
     label: string,
     actionKey: typeof busyAction,
     onClick: () => void,
-    Icon: typeof Mail,
+    Icon: typeof UserX,
     danger = false
   ) => {
     const isActive = busyAction === actionKey;
@@ -648,11 +670,9 @@ export function CandidatesPage() {
                 {selectedCount} selected
               </span>
             )}
-            {frameBulkBtn('Send Reminder', 'reminder', () => openAction('reminder'), Mail)}
-            {frameBulkBtn('Assign Role', 'role', () => openAction('role'), Briefcase)}
-            {frameBulkBtn('Shortlist', 'shortlist', () => openAction('shortlist'), ListChecks)}
             {frameBulkBtn('Reject', 'reject', () => openAction('reject'), UserX)}
-            {frameBulkBtn('Test User', 'testUser', () => openAction('testUser'), FlaskConical)}
+            {isSuperAdmin &&
+              frameBulkBtn('Remove', 'remove', () => openAction('remove'), RotateCcw)}
             {frameBulkBtn('Delete', 'delete', () => openAction('delete'), Trash2, true)}
           </>
         )}
@@ -666,7 +686,7 @@ export function CandidatesPage() {
       onHeaderSearchChange={setSearchInput}
       headerLeft={(
         <div className="min-w-0">
-          <h1 className="text-lg sm:text-xl font-bold text-hurix-charcoal leading-tight">Candidates</h1>
+          <h1 className="text-lg sm:text-xl font-bold text-hurix-charcoal leading-tight">Shortlisted Candidates</h1>
           {data && (
             <p className="text-xs sm:text-sm text-hurix-gray mt-0.5 truncate">
               <span className="font-semibold text-hurix-charcoal">{totalMatching}</span> candidates
@@ -687,14 +707,6 @@ export function CandidatesPage() {
               <Download size={16} /> Export
             </button>
           )}
-          {canManage && (
-            <Link
-              to="/admin/candidates/new"
-              className="btn-primary flex items-center justify-center gap-2 text-sm whitespace-nowrap"
-            >
-              <UserPlus size={16} /> Add Candidate
-            </Link>
-          )}
         </div>
       )}
     >
@@ -706,7 +718,7 @@ export function CandidatesPage() {
 
       {listError && (
         <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
-          Candidates could not be loaded{listError.requestId ? `. Reference: ${listError.requestId}` : '.'}{' '}
+          Shortlisted candidates could not be loaded{listError.requestId ? `. Reference: ${listError.requestId}` : '.'}{' '}
           {listError.message}
           <button type="button" className="ml-3 text-xs underline" onClick={() => refetch()}>Retry</button>
         </div>
@@ -841,12 +853,7 @@ export function CandidatesPage() {
         {isLoading ? (
           <p className="text-center text-hurix-gray py-8">Loading...</p>
         ) : data?.data.length === 0 ? (
-          <div className="text-center text-hurix-gray py-8 space-y-3">
-            <p>No candidates match the current filters.</p>
-            <button type="button" className="btn-secondary text-sm" onClick={clearAllFilters}>
-              Clear All Filters
-            </button>
-          </div>
+          <div className="py-8">{emptyState}</div>
         ) : (
           data?.data.map((c) => (
             <div key={c.id} className="card-premium space-y-3 overflow-hidden p-4">
@@ -1021,11 +1028,8 @@ export function CandidatesPage() {
                 <tr><td colSpan={14} className="p-8 text-center text-hurix-gray">Loading...</td></tr>
               ) : data?.data.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="p-8 text-center text-hurix-gray">
-                    <p className="mb-3">No candidates match the current filters.</p>
-                    <button type="button" className="btn-secondary text-sm" onClick={clearAllFilters}>
-                      Clear All Filters
-                    </button>
+                  <td colSpan={14} className="p-8">
+                    {emptyState}
                   </td>
                 </tr>
               ) : (
@@ -1105,74 +1109,31 @@ export function CandidatesPage() {
         </div>
       </div>
 
-      {modal === 'status' && (
-        <StatusChangeModal
-          count={actionCount}
-          onClose={() => setModal(null)}
-          onConfirm={async (newStatus) => {
-            await runAction(() => bulkChangeStatus(resolveSelection(), newStatus), false, 'status');
-          }}
-        />
-      )}
       {modal === 'reject' && (
         <RejectModal
           count={actionCount}
           onClose={() => setModal(null)}
           onConfirm={async (reason) => {
-            await runAction(() => bulkReject(resolveSelection(), reason), false, 'reject');
+            await runAction(() => bulkReject(resolveSelection(), reason), true, 'reject');
           }}
         />
       )}
-      {modal === 'shortlist' && (
-        <ShortlistModal
-          count={actionCount}
-          onClose={() => setModal(null)}
-          onConfirm={async () => {
-            await runAction(() => bulkShortlist(resolveSelection()), true, 'shortlist');
-          }}
-        />
-      )}
-      {modal === 'testUser' && (
-        <MarkTestUsersModal
-          count={actionCount}
-          onClose={() => setModal(null)}
-          onConfirm={async () => {
-            await runAction(() => bulkMarkTestUsers(resolveSelection()), true, 'testUser');
-          }}
-        />
-      )}
-      {modal === 'role' && (
-        <AssignRoleModal
-          count={actionCount}
-          onClose={() => setModal(null)}
-          onConfirm={async (jobRoleId) => {
-            await runAction(() => bulkAssignRole(resolveSelection(), jobRoleId), false, 'role');
-          }}
-        />
-      )}
-      {modal === 'reminder' && (
-        <ReminderModal
-          count={actionCount}
-          onClose={() => setModal(null)}
-          onConfirm={async (templateId) =>
-            runAction(
-              () => bulkSendReminders(resolveSelection(), templateId, crypto.randomUUID()),
-              false,
-              'reminder'
-            )
+      {modal === 'remove' && (
+        <GlassDialog
+          title="Remove from Shortlist"
+          message={
+            <>
+              Move <strong>{actionCount}</strong> shortlisted candidate
+              {actionCount === 1 ? '' : 's'} back to the main Candidates list?
+            </>
           }
-          onRetryFailed={async (templateId, failedIds) =>
-            runAction(
-              () =>
-                bulkSendReminders(
-                  { mode: 'IDS', candidateIds: failedIds },
-                  templateId,
-                  crypto.randomUUID()
-                ),
-              false,
-              'reminder'
-            )
-          }
+          confirmLabel="Confirm Remove"
+          onConfirm={async () => {
+            await runAction(() => bulkRestoreShortlisted(resolveSelection()), true, 'remove');
+            setModal(null);
+          }}
+          onCancel={() => setModal(null)}
+          isLoading={busy}
         />
       )}
       {modal === 'delete' && (
@@ -1184,29 +1145,12 @@ export function CandidatesPage() {
           }}
         />
       )}
-      {modal === 'interview' && (
-        <InterviewModal
-          count={actionCount}
-          onClose={() => setModal(null)}
-          onConfirm={async (payload) => {
-            await runAction(
-              () =>
-                scheduleInterview({
-                  ...payload,
-                  selection: resolveSelection(),
-                }),
-              false,
-              'interview'
-            );
-          }}
-        />
-      )}
       {modal === 'export' && (
         <ExportModal
           count={selection.effectiveCount}
           matchingTotal={totalMatching}
           listTotal={listTotal}
-          allLabel="All active candidates"
+          allLabel="All shortlisted candidates"
           hasSelection={selection.hasSelection}
           hasFilters={hasActiveFilters}
           onClose={() => setModal(null)}
@@ -1230,6 +1174,7 @@ export function CandidatesPage() {
           onClose={() => setOwnerModalCandidate(null)}
           onConfirm={async (nextOwnerId) => {
             await assignCandidateOwner(ownerModalCandidate.id, nextOwnerId);
+            await queryClient.invalidateQueries({ queryKey: ['shortlisted-candidates'] });
             await queryClient.invalidateQueries({ queryKey: ['candidates'] });
           }}
         />

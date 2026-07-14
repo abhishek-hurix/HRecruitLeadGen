@@ -4,6 +4,7 @@ import { AdminRole } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth';
 import { candidateBulkService } from '../services/candidate-bulk.service';
 import { reminderService } from '../services/reminder.service';
+import { whatsappTemplateService } from '../services/whatsapp-template.service';
 import { candidateExportService } from '../services/candidate-export.service';
 import { interviewService } from '../services/interview.service';
 import { CandidateSelectionInput } from '../services/candidate-selection.service';
@@ -20,10 +21,18 @@ const selectionSchema = z.object({
       status: z.string().nullable().optional(),
       experience: z.string().nullable().optional(),
       country: z.string().nullable().optional(),
+      countryCodes: z.array(z.string()).optional(),
       score: z.number().nullable().optional(),
       minScore: z.number().nullable().optional(),
+      noScore: z.boolean().nullable().optional(),
       jobRoleId: z.string().nullable().optional(),
       role: z.string().nullable().optional(),
+      roleAssignment: z.string().nullable().optional(),
+      isTestUser: z.boolean().nullable().optional(),
+      creationSource: z.string().nullable().optional(),
+      registeredFrom: z.string().nullable().optional(),
+      registeredTo: z.string().nullable().optional(),
+      datePreset: z.string().nullable().optional(),
     })
     .optional(),
 });
@@ -94,6 +103,118 @@ export async function bulkSoftDelete(req: AuthRequest, res: Response, next: Next
   }
 }
 
+export async function bulkRestoreDeleted(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    if (req.adminRole !== AdminRole.SUPER_ADMIN) {
+      throw new AppError(403, 'Only Super Admins can restore deleted candidates');
+    }
+    const selection = parseSelection(req.body.selection || req.body);
+    const result = await candidateBulkService.restoreBulk(selection, req.adminId!, requestMeta(req));
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function bulkRestoreRejected(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    if (req.adminRole !== AdminRole.SUPER_ADMIN) {
+      throw new AppError(403, 'Only Super Admins can restore rejected candidates');
+    }
+    const selection = parseSelection(req.body.selection || req.body);
+    // Ensure ALL_MATCHING stays scoped to rejected profiles
+    if (selection.mode === 'ALL_MATCHING') {
+      selection.filters = { ...(selection.filters || {}), status: 'REJECTED', journeyStatus: 'REJECTED' };
+    }
+    const result = await candidateBulkService.restoreRejected(
+      selection,
+      req.adminId!,
+      requestMeta(req)
+    );
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function bulkShortlist(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const selection = parseSelection(req.body.selection || req.body);
+    const result = await candidateBulkService.shortlist(selection, req.adminId!, requestMeta(req));
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function bulkRestoreShortlisted(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    if (req.adminRole !== AdminRole.SUPER_ADMIN) {
+      throw new AppError(403, 'Only Super Admins can restore shortlisted candidates');
+    }
+    const selection = parseSelection(req.body.selection || req.body);
+    if (selection.mode === 'ALL_MATCHING') {
+      selection.filters = { ...(selection.filters || {}), status: 'SHORTLISTED', journeyStatus: 'SHORTLISTED' };
+    }
+    const result = await candidateBulkService.restoreShortlisted(
+      selection,
+      req.adminId!,
+      requestMeta(req)
+    );
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function bulkMarkTestUsers(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const selection = parseSelection(req.body.selection || req.body);
+    const result = await candidateBulkService.markAsTestUsers(
+      selection,
+      req.adminId!,
+      requestMeta(req)
+    );
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function bulkRemoveTestUsers(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    if (req.adminRole !== AdminRole.SUPER_ADMIN) {
+      throw new AppError(403, 'Only Super Admins can remove candidates from Test Users');
+    }
+    const selection = parseSelection(req.body.selection || req.body);
+    if (selection.mode === 'ALL_MATCHING') {
+      selection.filters = { ...(selection.filters || {}), isTestUser: true };
+    }
+    const result = await candidateBulkService.removeFromTestUsers(
+      selection,
+      req.adminId!,
+      requestMeta(req)
+    );
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function bulkPermanentDelete(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const selection = parseSelection(req.body.selection || req.body);
+    const result = await candidateBulkService.permanentDeleteBulk(
+      selection,
+      req.adminId!,
+      requestMeta(req)
+    );
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function bulkSendReminders(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const selection = parseSelection(req.body.selection || req.body);
@@ -121,6 +242,41 @@ export async function listReminderTemplates(req: AuthRequest, res: Response, nex
   }
 }
 
+export async function createReminderTemplate(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await reminderService.createTemplate(req.adminId!, {
+      name: String(req.body.name || ''),
+      subject: String(req.body.subject || ''),
+      bodyHtml: String(req.body.bodyHtml || ''),
+    });
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateReminderTemplate(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await reminderService.updateTemplate(String(req.params.id), req.adminId!, {
+      name: String(req.body.name || ''),
+      subject: String(req.body.subject || ''),
+      bodyHtml: String(req.body.bodyHtml || ''),
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteReminderTemplate(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    await reminderService.deleteTemplate(String(req.params.id), req.adminId!);
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function previewReminder(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const templateId = String(req.body.templateId || req.params.id);
@@ -135,6 +291,48 @@ export async function previewReminder(req: AuthRequest, res: Response, next: Nex
       companyName: sample.companyName || 'Hurix Digital',
     });
     res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listWhatsAppTemplates(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await whatsappTemplateService.listTemplates(req.adminId!);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createWhatsAppTemplate(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await whatsappTemplateService.createTemplate(req.adminId!, {
+      name: String(req.body.name || ''),
+      bodyText: String(req.body.bodyText || ''),
+    });
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateWhatsAppTemplate(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const data = await whatsappTemplateService.updateTemplate(String(req.params.id), req.adminId!, {
+      name: String(req.body.name || ''),
+      bodyText: String(req.body.bodyText || ''),
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteWhatsAppTemplate(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    await whatsappTemplateService.deleteTemplate(String(req.params.id), req.adminId!);
+    res.json({ success: true });
   } catch (error) {
     next(error);
   }
@@ -169,8 +367,12 @@ export async function listDeletedCandidates(req: AuthRequest, res: Response, nex
   try {
     const result = await candidateBulkService.listDeleted({
       search: req.query.search as string,
+      role: req.query.role ? String(req.query.role) : undefined,
+      registeredFrom: req.query.registeredFrom ? String(req.query.registeredFrom) : undefined,
+      registeredTo: req.query.registeredTo ? String(req.query.registeredTo) : undefined,
+      datePreset: req.query.datePreset ? String(req.query.datePreset) : undefined,
       page: req.query.page ? parseInt(String(req.query.page), 10) : 1,
-      pageSize: req.query.pageSize ? parseInt(String(req.query.pageSize), 10) : 25,
+      pageSize: req.query.pageSize ? parseInt(String(req.query.pageSize), 10) : 10,
     });
     res.json({ success: true, ...result });
   } catch (error) {
@@ -189,6 +391,9 @@ export async function getDeletedCandidate(req: AuthRequest, res: Response, next:
 
 export async function restoreCandidate(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    if (req.adminRole !== AdminRole.SUPER_ADMIN) {
+      throw new AppError(403, 'Only Super Admins can restore deleted candidates');
+    }
     const result = await candidateBulkService.restore(String(req.params.candidateId), req.adminId!);
     res.json({ success: true, ...result });
   } catch (error) {
