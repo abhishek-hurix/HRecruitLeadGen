@@ -702,7 +702,7 @@ export function InterviewModal({
         <div className="mb-3 rounded-xl border border-white/70 bg-white/60 p-3 backdrop-blur-md">
           <p className="mb-1 text-xs font-semibold text-neutral-900">Sequential schedule preview</p>
           <ul className="space-y-1 text-xs text-neutral-600">
-            {slotPreview.map((s) => (
+            {slotPreview.map((s: string) => (
               <li key={s}>{s}</li>
             ))}
           </ul>
