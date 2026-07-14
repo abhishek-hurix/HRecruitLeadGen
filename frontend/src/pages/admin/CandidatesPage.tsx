@@ -98,7 +98,6 @@ export function CandidatesPage() {
   const [ownerModalCandidate, setOwnerModalCandidate] = useState<Candidate | null>(null);
   const [whatsappCandidate, setWhatsappCandidate] = useState<Candidate | null>(null);
   const [scoreCandidateId, setScoreCandidateId] = useState<string | null>(null);
-  const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<'status' | 'reminder' | 'role' | 'reject' | 'shortlist' | 'interview' | 'export' | 'delete' | 'testUser' | null>(null);
   const [listError, setListError] = useState<{ message: string; requestId?: string } | null>(null);
@@ -264,8 +263,7 @@ export function CandidatesPage() {
 
   const actionCount = actionTarget === 'bulk' ? selection.effectiveCount : 1;
 
-  const refreshAfterMutation = async (result: BulkResult, clearAfter = false) => {
-    setBulkResult(result);
+  const refreshAfterMutation = async (_result: BulkResult, clearAfter = false) => {
     await queryClient.invalidateQueries({ queryKey: ['candidates'] });
     await queryClient.invalidateQueries({ queryKey: ['test-users'] });
     await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
