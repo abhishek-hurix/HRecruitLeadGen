@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   getReminderTemplates,
   previewReminderTemplate,
@@ -7,7 +7,7 @@ import {
   getWhatsAppTemplates,
 } from '../../api/admin';
 import { getAdminActionErrorMessage } from '../../utils/apiErrors';
-import type { BulkResult, ExportFormat, ExportScope, WhatsAppTemplate } from '../../types/candidate-management';
+import type { ExportFormat, ExportScope, WhatsAppTemplate } from '../../types/candidate-management';
 import {
   buildWhatsAppUrl,
   candidateWhatsAppVars,
