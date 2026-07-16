@@ -248,10 +248,6 @@ export function AddCandidatePage() {
           </div>
         )}
 
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-          Each email can only have one candidate name. Use the same name every time for that email.
-          Names are auto-formatted as <strong>First Last</strong> (first letter capital, rest lowercase for each part).
-        </div>
 
         <div>
           <label className="block text-sm font-medium mb-1">Full Name *</label>
