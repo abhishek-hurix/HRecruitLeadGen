@@ -41,7 +41,29 @@ export class AssessmentService {
     const candidate = await this.getCandidate(candidateId);
     const hasCompleted = candidate.submissions.length > 0 ||
       candidate.assessments.some((a) => a.status === AssessmentStatus.COMPLETED);
-    const inProgress = candidate.assessments.some((a) => a.status === AssessmentStatus.IN_PROGRESS);
+    const now = new Date();
+
+    const staleIds = candidate.assessments
+      .filter(
+        (a) =>
+          a.status === AssessmentStatus.IN_PROGRESS &&
+          a.expiresAt &&
+          a.expiresAt <= now
+      )
+      .map((a) => a.id);
+    if (staleIds.length > 0) {
+      await prisma.assessment.updateMany({
+        where: { id: { in: staleIds } },
+        data: { status: AssessmentStatus.EXPIRED },
+      });
+    }
+
+    const inProgress = candidate.assessments.some(
+      (a) =>
+        a.status === AssessmentStatus.IN_PROGRESS &&
+        a.expiresAt &&
+        a.expiresAt > now
+    );
     const durationMinutes = await resolveDurationMinutes();
 
     return {
@@ -208,8 +230,8 @@ export class AssessmentService {
     return response;
   }
 
-  /** @deprecated Use selectRoleAndStart — kept for backward-compatible assessment links */
-  async startAssessment(candidateId: string, language: Language) {
+  /** Start a fresh timed session from the instruction page. */
+  async startAssessment(candidateId: string, _language?: Language) {
     const candidate = await prisma.candidateProfile.findUnique({
       where: { id: candidateId },
       include: { assessments: true, submissions: true },
@@ -227,10 +249,11 @@ export class AssessmentService {
       throw new AppError(403, 'You have already completed this assessment.');
     }
 
-    const existing = candidate.assessments.find((a) => a.status === AssessmentStatus.IN_PROGRESS);
-    if (existing) {
-      return this.getAssessmentSession(existing.id, candidateId);
-    }
+    // Always begin a new session when the candidate clicks Start Assessment.
+    await prisma.assessment.updateMany({
+      where: { candidateId, status: AssessmentStatus.IN_PROGRESS },
+      data: { status: AssessmentStatus.EXPIRED },
+    });
 
     return this.selectRoleAndStart(candidateId, candidate.selectedRoleId);
   }

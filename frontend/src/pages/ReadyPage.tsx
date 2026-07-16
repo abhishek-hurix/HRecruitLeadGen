@@ -58,6 +58,7 @@ export function ReadyPage() {
     setStarting(true);
     setError('');
     try {
+      // Resume only when a live session still has time remaining.
       if (hasInProgress) {
         navigate(`/assessment?token=${encodeURIComponent(token)}`);
         return;
@@ -66,6 +67,7 @@ export function ReadyPage() {
         navigate(`/select-role?token=${encodeURIComponent(token)}`);
         return;
       }
+      // Start Assessment always creates a fresh 15-minute session.
       await startAssessment();
       navigate(`/assessment?token=${encodeURIComponent(token)}`);
     } catch (err) {
