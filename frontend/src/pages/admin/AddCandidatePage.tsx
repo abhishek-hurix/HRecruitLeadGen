@@ -132,7 +132,9 @@ export function AddCandidatePage() {
       errors.phoneNumber = 'Valid phone number required for selected country';
     }
     if (!form.experienceCategory) errors.experienceCategory = 'Years of experience is required';
-    if (!isValidLinkedIn(form.linkedinUrl)) errors.linkedinUrl = 'Valid LinkedIn URL required';
+    if (form.linkedinUrl.trim() && !isValidLinkedIn(form.linkedinUrl.trim())) {
+      errors.linkedinUrl = 'Enter a valid LinkedIn URL or leave blank';
+    }
     if (!form.jobRoleId) errors.jobRoleId = 'Job role is required';
     if (!resume) errors.resume = 'Resume PDF is required';
     else if (!isPdfFile(resume)) errors.resume = 'Only PDF files allowed';
@@ -372,7 +374,7 @@ export function AddCandidatePage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">LinkedIn URL *</label>
+          <label className="block text-sm font-medium mb-1">LinkedIn URL (optional)</label>
           <input
             className="input-field"
             value={form.linkedinUrl}

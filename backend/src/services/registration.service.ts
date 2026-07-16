@@ -149,7 +149,8 @@ export class RegistrationService {
 
     const parsedPhone = parseAndValidatePhone(data.phoneCountryIso, data.phoneNumber);
 
-    if (!isValidLinkedInUrl(data.linkedinUrl)) {
+    const linkedinUrl = (data.linkedinUrl || '').trim();
+    if (linkedinUrl && !isValidLinkedInUrl(linkedinUrl)) {
       throw new AppError(400, 'Invalid LinkedIn URL');
     }
     if (data.fullName.trim().length < 2) {
@@ -224,7 +225,7 @@ export class RegistrationService {
         phoneCountryIso: parsedPhone.iso,
         experienceCategory,
         yearsOfExperience: getExperienceYears(experienceCategory),
-        linkedinUrl: data.linkedinUrl.trim(),
+        linkedinUrl: linkedinUrl || '',
         resumePath,
         appliedRole,
         referralCode: data.referralCode || null,

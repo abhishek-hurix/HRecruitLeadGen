@@ -83,7 +83,7 @@ export function CandidatesPage() {
   const [countryCodes, setCountryCodes] = useState<string[]>([]);
   const [minScore, setMinScore] = useState('');
   const [role, setRole] = useState('all');
-  const [roleAssignment, setRoleAssignment] = useState('all');
+  const [assessmentStatus, setAssessmentStatus] = useState<'' | 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED'>('');
   const [inactivityPreset, setInactivityPreset] = useState<'' | '7' | '15' | '30' | '45' | 'custom'>('');
   const [inactivityCustom, setInactivityCustom] = useState('');
   const inactivityDays = inactivityPreset === 'custom' ? inactivityCustom : inactivityPreset;
@@ -120,16 +120,18 @@ export function CandidatesPage() {
     return () => window.clearTimeout(t);
   }, [searchInput]);
 
+  const assessmentStatusFilter = assessmentStatus ? `ASSESSMENT_${assessmentStatus}` : '';
+
   const filters = useMemo(
     () => ({
       search,
-      status: '',
+      status: assessmentStatusFilter,
       experience,
       country: '',
       countryCodes,
       minScore,
-      role,
-      roleAssignment,
+      role: role !== 'na' ? role : 'all',
+      roleAssignment: role === 'na' ? 'na' : 'all',
       registeredFrom,
       registeredTo,
       datePreset: registeredFrom || registeredTo ? 'custom' : '',
@@ -140,11 +142,11 @@ export function CandidatesPage() {
     }),
     [
       search,
+      assessmentStatusFilter,
       experience,
       countryCodes,
       minScore,
       role,
-      roleAssignment,
       registeredFrom,
       registeredTo,
       inactivityDays,
@@ -169,11 +171,11 @@ export function CandidatesPage() {
     queryKey: [
       'candidates',
       search,
+      assessmentStatus,
       experience,
       countryCodes,
       minScore,
       role,
-      roleAssignment,
       registeredFrom,
       registeredTo,
       inactivityDays,
@@ -185,17 +187,13 @@ export function CandidatesPage() {
     queryFn: () =>
       getCandidates({
         search,
+        status: assessmentStatusFilter || undefined,
         experience,
         countryCodes: countryCodes.length ? countryCodes : undefined,
         minScore:
           minScore === 'na' ? 'na' : minScore !== '' ? Number(minScore) : undefined,
-        role: role !== 'all' ? role : undefined,
-        roleAssignment:
-          roleAssignment === 'assigned' ||
-          roleAssignment === 'unassigned' ||
-          roleAssignment === 'na'
-            ? roleAssignment
-            : undefined,
+        role: role !== 'all' && role !== 'na' ? role : undefined,
+        roleAssignment: role === 'na' ? 'na' : undefined,
         registeredFrom: registeredFrom || undefined,
         registeredTo: registeredTo || undefined,
         datePreset: registeredFrom || registeredTo ? 'custom' : undefined,
@@ -578,7 +576,7 @@ export function CandidatesPage() {
     setCountryCodes([]);
     setMinScore('');
     setRole('all');
-    setRoleAssignment('all');
+    setAssessmentStatus('');
     setInactivityPreset('');
     setInactivityCustom('');
     setRegisteredFrom('');
@@ -594,7 +592,7 @@ export function CandidatesPage() {
       countryCodes.length ||
       minScore ||
       (role && role !== 'all') ||
-      (roleAssignment && roleAssignment !== 'all') ||
+      assessmentStatus ||
       inactivityDays ||
       registeredFrom ||
       registeredTo
@@ -615,14 +613,14 @@ export function CandidatesPage() {
 
   const filterSnapshot = {
     search: search || undefined,
-    status: null,
+    status: assessmentStatusFilter || null,
     experience: experience || null,
     country: null,
     countryCodes: countryCodes.length ? countryCodes : null,
     minScore: minScore && minScore !== 'na' ? Number(minScore) : null,
     noScore: minScore === 'na' ? true : null,
-    role: role !== 'all' ? role : null,
-    roleAssignment: roleAssignment !== 'all' ? roleAssignment : null,
+    role: role !== 'all' && role !== 'na' ? role : null,
+    roleAssignment: role === 'na' ? 'na' : null,
     registeredFrom: registeredFrom || null,
     registeredTo: registeredTo || null,
     datePreset: registeredFrom || registeredTo ? 'custom' : null,
@@ -833,7 +831,7 @@ export function CandidatesPage() {
       <div className="relative z-50 mb-3 flex flex-wrap gap-2 justify-start items-start">
         <button
           type="button"
-          onClick={() => { setRole('all'); setRoleAssignment('all'); setPage(1); }}
+          onClick={() => { setRole('all'); setPage(1); }}
           className={role === 'all' ? 'filter-chip-active' : 'filter-chip'}
         >
           All
@@ -842,7 +840,7 @@ export function CandidatesPage() {
           <button
             key={filter.value}
             type="button"
-            onClick={() => { setRole(filter.value); setRoleAssignment('all'); setPage(1); }}
+            onClick={() => { setRole(filter.value); setPage(1); }}
             className={role === filter.value ? 'filter-chip-active' : 'filter-chip'}
           >
             {filter.label}
@@ -873,32 +871,29 @@ export function CandidatesPage() {
           </select>
           <select
             className="filter-glass"
-            value={roleAssignment}
+            value={assessmentStatus}
             onChange={(e) => {
-              const v = e.target.value;
-              setRoleAssignment(v);
-              if (v === 'assigned' || v === 'unassigned' || v === 'na' || v === 'all') setRole('all');
+              setAssessmentStatus(e.target.value as '' | 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED');
               setPage(1);
             }}
-            aria-label="Role assignment filter"
+            aria-label="Assessment status filter"
           >
-            <option value="all">All Candidates</option>
-            <option value="assigned">Role Assigned</option>
-            <option value="unassigned">No Role Assigned</option>
-            <option value="na">NA</option>
+            <option value="">All Assessment</option>
+            <option value="NOT_STARTED">Not Started</option>
+            <option value="IN_PROGRESS">In Progress</option>
+            <option value="SUBMITTED">Submitted</option>
           </select>
           <select
             className="filter-glass"
-            value={roleFilters.some((f) => f.value === role) ? role : ''}
+            value={role === 'na' ? 'na' : roleFilters.some((f) => f.value === role) ? role : ''}
             onChange={(e) => {
-              const v = e.target.value || 'all';
-              setRole(v);
-              if (v !== 'all') setRoleAssignment('all');
+              setRole(e.target.value || 'all');
               setPage(1);
             }}
             aria-label="Specific job role"
           >
             <option value="">Specific Job Role</option>
+            <option value="na">NA</option>
             {(rolesData?.data || []).map((r) => (
               <option key={r.id} value={r.id}>{r.title}</option>
             ))}

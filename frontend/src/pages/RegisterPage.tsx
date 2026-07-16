@@ -88,7 +88,9 @@ export function RegisterPage() {
       e.phone = 'Valid phone number required for selected country';
     }
     if (!form.experienceCategory) e.experienceCategory = 'Years of experience is required';
-    if (!isValidLinkedIn(form.linkedinUrl)) e.linkedinUrl = 'Valid LinkedIn URL required';
+    if (form.linkedinUrl.trim() && !isValidLinkedIn(form.linkedinUrl.trim())) {
+      e.linkedinUrl = 'Enter a valid LinkedIn URL or leave blank';
+    }
     if (!resume) e.resume = 'Resume PDF is required';
     else if (!isPdfFile(resume)) e.resume = 'Only PDF files allowed';
     else if (resume.size > 5 * 1024 * 1024) e.resume = 'Max file size is 5MB';
@@ -251,7 +253,7 @@ export function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">LinkedIn URL *</label>
+              <label className="block text-sm font-medium mb-1">LinkedIn URL (optional)</label>
               <input
                 className="input-field"
                 value={form.linkedinUrl}
