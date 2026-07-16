@@ -25,6 +25,7 @@ import { writeAuditLog } from '../utils/admin-safety';
 import { activeCandidateWhere, mergeCandidateWhere } from '../utils/candidate-scope';
 import { logger } from '../utils/logger';
 import { config } from '../config';
+import { reminderService } from './reminder.service';
 
 const MAX_TEXT = 200;
 const MAX_LONG = 2000;
@@ -48,6 +49,16 @@ export interface ManualCandidateInput {
   allowDuplicateOverride?: boolean;
   duplicateOverrideReason?: string | null;
   sendInvitation?: boolean;
+}
+
+export interface InviteCandidateInput {
+  fullName: string;
+  email: string;
+  jobRoleId: string;
+  subject?: string | null;
+  bodyHtml?: string | null;
+  allowDuplicateOverride?: boolean;
+  duplicateOverrideReason?: string | null;
 }
 
 function sanitizeText(value: unknown, field: string, max = MAX_TEXT): string | null {
@@ -449,5 +460,239 @@ export async function checkCandidateDuplicate(email: string) {
   return {
     duplicate: Boolean(existing),
     existing: existing ? safeExistingSummary(existing) : null,
+  };
+}
+
+function buildRegistrationUrl() {
+  return 'https://candidates.hurixsystems.com/';
+}
+
+export async function createInviteCandidate(params: {
+  input: InviteCandidateInput;
+  adminUserId: string;
+  adminRole: AdminRole;
+  idempotencyKey: string;
+}) {
+  const { input, adminUserId, idempotencyKey } = params;
+
+  return beginIdempotentOperation({
+    adminUserId,
+    operationType: 'MANUAL_CANDIDATE_CREATE',
+    key: idempotencyKey,
+    requestPayload: {
+      email: normalizeEmail(input.email || ''),
+      fullName: input.fullName,
+      jobRoleId: input.jobRoleId,
+      inviteOnly: true,
+      allowDuplicateOverride: Boolean(input.allowDuplicateOverride),
+    },
+    execute: async () => {
+      const body = await createInviteCandidateCore({
+        input,
+        adminUserId: params.adminUserId,
+        adminRole: params.adminRole,
+      });
+      return { status: 201, body };
+    },
+  });
+}
+
+async function createInviteCandidateCore(params: {
+  input: InviteCandidateInput;
+  adminUserId: string;
+  adminRole: AdminRole;
+}) {
+  const { input, adminUserId, adminRole } = params;
+
+  const fullName = sanitizeText(input.fullName, 'fullName', 120);
+  if (!fullName || fullName.length < 2) throw new AppError(400, 'Full name is required');
+
+  if (!isValidEmail(input.email || '')) throw new AppError(400, 'Invalid email format');
+  const email = normalizeEmail(input.email);
+
+  if (!input.jobRoleId) throw new AppError(400, 'Job role is required');
+  const jobRole = await prisma.jobRole.findUnique({ where: { id: input.jobRoleId } });
+  if (!jobRole || jobRole.status !== JobRoleStatus.ACTIVE) {
+    throw new AppError(400, 'Job role not found or inactive');
+  }
+
+  const duplicate = await findActiveDuplicateByEmail(email);
+  if (duplicate) {
+    const reason = sanitizeText(input.duplicateOverrideReason, 'duplicateOverrideReason', 500);
+    const allowOverride =
+      adminRole === AdminRole.SUPER_ADMIN && Boolean(input.allowDuplicateOverride) && Boolean(reason);
+
+    if (!allowOverride) {
+      if (adminRole === AdminRole.SUPER_ADMIN && input.allowDuplicateOverride && !reason) {
+        throw new AppError(400, 'duplicateOverrideReason is required for override');
+      }
+      throw new AppError(409, 'A candidate with this email already exists', undefined, {
+        existing: safeExistingSummary(duplicate),
+        dataModelNote:
+          'User email is unique. CandidateProfile is the application unit. Super Admin may override to create another application on the same User.',
+      });
+    }
+  }
+
+  const parsedPhone = parseAndValidatePhone('IN', '9876543210');
+  const experienceCategory = ExperienceCategory.FRESHER;
+
+  const existingUser = await prisma.user.findFirst({
+    where: { OR: [{ email }, { normalizedEmail: email }] },
+  });
+
+  const profileId = randomUUID();
+  const applicationId = applicationIdFromUuid(profileId);
+  const now = new Date();
+  const compensation =
+    jobRole.compensationType === 'HOURLY' && jobRole.hourlyRate != null
+      ? `${jobRole.currency} ${jobRole.hourlyRate}/hr`
+      : jobRole.monthlySalary != null
+        ? `${jobRole.currency} ${jobRole.monthlySalary}/mo`
+        : jobRole.currency;
+
+  const passwordHash = await bcrypt.hash(randomBytes(24).toString('hex'), 12);
+
+  const profileData: Prisma.CandidateProfileCreateWithoutUserInput = {
+    id: profileId,
+    applicationId,
+    fullName,
+    phone: parsedPhone.phoneNumber,
+    countryCode: parsedPhone.countryCode,
+    phoneNumber: parsedPhone.phoneNumber,
+    fullPhone: parsedPhone.fullPhone,
+    phoneCountry: parsedPhone.phoneCountry,
+    phoneCountryIso: parsedPhone.iso,
+    experienceCategory,
+    yearsOfExperience: getExperienceYears(experienceCategory),
+    linkedinUrl: '',
+    emailVerified: false,
+    resumePath: '',
+    appliedRole: jobRole.title,
+    selectedRole: { connect: { id: jobRole.id } },
+    selectedRoleName: jobRole.title,
+    selectedCountry: jobRole.country,
+    selectedCompensation: compensation,
+    selectedSkills: jobRole.skills as Prisma.InputJsonValue,
+    roleSelectedAt: now,
+    creationSource: CandidateCreationSource.ADMIN_CREATED,
+    createdByAdmin: { connect: { id: adminUserId } },
+    lastActivityAt: now,
+    lastActivityType: CandidateActivityType.REMINDER_SENT,
+    activities: {
+      create: {
+        id: randomUUID(),
+        type: CandidateActivityType.REMINDER_SENT,
+        actorAdminId: adminUserId,
+        occurredAt: now,
+        metadata: {
+          source: 'admin_registration_invite',
+          duplicateOverride: Boolean(duplicate),
+        },
+      },
+    },
+  };
+
+  let candidateId: string;
+  let userId: string;
+
+  if (existingUser) {
+    const updated = await prisma.user.update({
+      where: { id: existingUser.id },
+      data: {
+        normalizedEmail: email,
+        candidateProfiles: { create: profileData },
+      },
+      include: { candidateProfiles: { where: { id: profileId } } },
+    });
+    userId = updated.id;
+    candidateId = updated.candidateProfiles[0]?.id || profileId;
+  } else {
+    const created = await prisma.user.create({
+      data: {
+        email,
+        normalizedEmail: email,
+        passwordHash,
+        authProvider: AuthProvider.LOCAL,
+        candidateProfiles: { create: profileData },
+      },
+      include: { candidateProfiles: { where: { id: profileId } } },
+    });
+    userId = created.id;
+    candidateId = created.candidateProfiles[0]?.id || profileId;
+  }
+
+  await prisma.jobRole.update({
+    where: { id: jobRole.id },
+    data: { applicationsReceived: { increment: 1 } },
+  });
+
+  await writeAuditLog({
+    adminUserId,
+    action: duplicate ? 'CANDIDATE_MANUAL_CREATE_OVERRIDE' : 'CANDIDATE_REGISTRATION_INVITE',
+    entityType: 'candidate',
+    entityId: candidateId,
+    metadata: {
+      email,
+      jobRoleId: jobRole.id,
+      duplicateOverride: Boolean(duplicate),
+      overrideReason: duplicate
+        ? sanitizeText(input.duplicateOverrideReason, 'duplicateOverrideReason', 500)
+        : null,
+      userId,
+      inviteOnly: true,
+    },
+  });
+
+  const registrationUrl = buildRegistrationUrl();
+  const templateVars = {
+    candidateName: fullName,
+    assignedRole: jobRole.title,
+    registrationUrl,
+  };
+
+  let invitationSent = false;
+  let invitationError: string | null = null;
+
+  try {
+    const rendered = await reminderService.previewRegistrationInvite(
+      adminUserId,
+      templateVars,
+      {
+        subject: input.subject || undefined,
+        bodyHtml: input.bodyHtml || undefined,
+      }
+    );
+    await emailService.sendCustomEmail({
+      to: email,
+      subject: rendered.subject,
+      html: rendered.bodyHtml,
+    });
+    await candidateStatusService.markEmailSent(candidateId);
+    invitationSent = true;
+  } catch (e) {
+    invitationError = 'Registration invitation email failed; candidate was created';
+    logger.error('Registration invite email failed', {
+      candidateId,
+      error: e instanceof Error ? e.message : e,
+    });
+  }
+
+  return {
+    success: true,
+    candidateCreated: true,
+    invitationSent,
+    invitationError,
+    candidate: {
+      id: candidateId,
+      applicationId,
+      fullName,
+      email,
+      assignedRole: jobRole.title,
+      jobRoleId: jobRole.id,
+    },
+    registrationUrl,
+    dataModelNote:
+      'Invite-only candidate created. Candidate must complete self-registration before assessment.',
   };
 }

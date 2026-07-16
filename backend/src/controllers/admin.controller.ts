@@ -161,6 +161,83 @@ export async function checkDuplicateCandidate(req: AuthRequest, res: Response, n
   }
 }
 
+export async function getRegistrationInviteTemplate(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { reminderService } = await import('../services/reminder.service');
+    const template = await reminderService.getRegistrationInviteTemplate(req.adminId!);
+    res.json({
+      success: true,
+      data: {
+        id: template.id,
+        name: template.name,
+        subject: template.subject,
+        bodyHtml: template.bodyHtml,
+      },
+      requestId: req.requestId,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function previewRegistrationInvite(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { reminderService } = await import('../services/reminder.service');
+    const candidateName = String(req.body.candidateName || 'Jane Doe').trim();
+    const assignedRole = String(req.body.assignedRole || 'Software Engineer').trim();
+    const registrationUrl =
+      String(req.body.registrationUrl || '').trim() || 'https://candidates.hurixsystems.com/';
+
+    const data = await reminderService.previewRegistrationInvite(
+      req.adminId!,
+      { candidateName, assignedRole, registrationUrl },
+      {
+        subject: req.body.subject ? String(req.body.subject) : undefined,
+        bodyHtml: req.body.bodyHtml ? String(req.body.bodyHtml) : undefined,
+      }
+    );
+    res.json({ success: true, data, requestId: req.requestId });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function inviteCandidate(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { createInviteCandidate } = await import('../services/admin-candidate-create.service');
+    const idempotencyKey =
+      String(req.headers['idempotency-key'] || req.body?.idempotencyKey || '').trim();
+    if (!idempotencyKey || idempotencyKey.length < 8) {
+      const { AppError } = await import('../utils/errors');
+      throw new AppError(400, 'Idempotency-Key header is required (min 8 characters)');
+    }
+
+    const allowDuplicateOverride =
+      req.body.allowDuplicateOverride === true ||
+      req.body.allowDuplicateOverride === 'true' ||
+      req.body.allowDuplicateOverride === '1';
+
+    const data = await createInviteCandidate({
+      input: {
+        fullName: req.body.fullName,
+        email: req.body.email,
+        jobRoleId: req.body.jobRoleId,
+        subject: req.body.subject,
+        bodyHtml: req.body.bodyHtml,
+        allowDuplicateOverride,
+        duplicateOverrideReason: req.body.duplicateOverrideReason,
+      },
+      adminUserId: req.adminId!,
+      adminRole: req.adminRole!,
+      idempotencyKey,
+    });
+
+    res.status(201).json({ ...data, requestId: req.requestId });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function createCandidate(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { createManualCandidate } = await import('../services/admin-candidate-create.service');

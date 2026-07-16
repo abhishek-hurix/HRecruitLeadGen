@@ -34,7 +34,18 @@ const DEFAULT_TEMPLATES = [
 <p><a href="${CANDIDATE_PORTAL_URL}">${CANDIDATE_PORTAL_URL}</a></p>
 <p>Regards,<br/>Team Hurix Digital</p>`,
   },
+  {
+    name: 'Registration Invite',
+    subject: 'You have been invited to Hurix Talent Assessment',
+    bodyHtml: `<p>Hello {{candidateName}},</p>
+<p>You have been invited to give an assessment for the role of <strong>{{assignedRole}}</strong>.</p>
+<p>To proceed, please complete your registration and profile on our platform.</p>
+<p><a href="{{registrationUrl}}">Complete Registration and Profile</a></p>
+<p>Thank you,<br/>Team Hurix Digital</p>`,
+  },
 ];
+
+const REGISTRATION_INVITE_TEMPLATE_NAME = 'Registration Invite';
 
 function renderTemplate(template: string, vars: Record<string, string>): string {
   let out = template;
@@ -145,6 +156,30 @@ export class ReminderService {
     return {
       subject: renderTemplate(template.subject, sample),
       bodyHtml: renderTemplate(template.bodyHtml, sample),
+    };
+  }
+
+  async getRegistrationInviteTemplate(adminUserId: string) {
+    await ensureDefaultTemplates(adminUserId);
+    const template = await prisma.emailReminderTemplate.findFirst({
+      where: { name: REGISTRATION_INVITE_TEMPLATE_NAME, isActive: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!template) throw new AppError(500, 'Registration invite template not found');
+    return template;
+  }
+
+  async previewRegistrationInvite(
+    adminUserId: string,
+    sample: Record<string, string>,
+    overrides?: { subject?: string; bodyHtml?: string }
+  ) {
+    const template = await this.getRegistrationInviteTemplate(adminUserId);
+    const subjectTpl = overrides?.subject?.trim() || template.subject;
+    const bodyTpl = overrides?.bodyHtml?.trim() || template.bodyHtml;
+    return {
+      subject: renderTemplate(subjectTpl, sample),
+      bodyHtml: renderTemplate(bodyTpl, sample),
     };
   }
 

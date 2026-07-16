@@ -30,10 +30,11 @@ export function plainToEmailHtml(plain: string): string {
   const normalized = plain.replace(/\r\n/g, '\n').trim();
   if (!normalized) return '';
 
-  const paragraphs = normalized.split(/\n{2,}/);
-  return paragraphs
-    .map((para) => {
-      const lines = para.split('\n').map((line) => autoLinkUrls(escapeEmailText(line)));
+  const blocks = normalized.split('\n\n');
+  return blocks
+    .map((block) => {
+      if (!block.trim()) return '<p>&nbsp;</p>';
+      const lines = block.split('\n').map((line) => autoLinkUrls(escapeEmailText(line)));
       return `<p>${lines.join('<br/>')}</p>`;
     })
     .join('\n');

@@ -167,9 +167,24 @@ export class RegistrationService {
       where: {
         OR: [{ email }, { normalizedEmail: email }],
       },
-      include: { candidateProfiles: true },
+      include: { candidateProfiles: { where: { deletedAt: null } } },
     });
-    if (existingUser?.candidateProfiles.some((profile) => profile.appliedRole.toLowerCase() === appliedRole.toLowerCase())) {
+
+    const pendingInviteProfile = existingUser?.candidateProfiles
+      .filter(
+        (profile) =>
+          profile.creationSource === CandidateCreationSource.ADMIN_CREATED &&
+          !profile.resumePath &&
+          !profile.deletedAt
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+
+    if (
+      !pendingInviteProfile &&
+      existingUser?.candidateProfiles.some(
+        (profile) => profile.appliedRole.toLowerCase() === appliedRole.toLowerCase()
+      )
+    ) {
       throw new AppError(409, 'An application with this email and role already exists.');
     }
 
@@ -211,11 +226,11 @@ export class RegistrationService {
         createdSupabaseUserId = existingSupabaseUser ? null : supabaseUserId;
       }
 
-      const profileId = randomUUID();
+      const profileId = pendingInviteProfile?.id || randomUUID();
       const now = new Date();
       const candidateProfileData = {
         id: profileId,
-        applicationId: applicationIdFromUuid(profileId),
+        applicationId: pendingInviteProfile?.applicationId || applicationIdFromUuid(profileId),
         fullName: data.fullName.trim(),
         phone: parsedPhone.phoneNumber,
         countryCode: parsedPhone.countryCode,
@@ -229,7 +244,9 @@ export class RegistrationService {
         resumePath,
         appliedRole,
         referralCode: data.referralCode || null,
-        creationSource: CandidateCreationSource.SELF_REGISTERED,
+        creationSource: pendingInviteProfile
+          ? CandidateCreationSource.ADMIN_CREATED
+          : CandidateCreationSource.SELF_REGISTERED,
         lastActivityAt: now,
         lastActivityType: CandidateActivityType.REGISTERED,
         resumes: {
@@ -248,41 +265,84 @@ export class RegistrationService {
             id: randomUUID(),
             type: CandidateActivityType.REGISTERED,
             occurredAt: now,
-            metadata: { source: 'self_registration' },
+            metadata: {
+              source: pendingInviteProfile ? 'admin_invite_registration_complete' : 'self_registration',
+            },
           },
         },
       };
 
-      const user = existingUser
-        ? await prisma.user.update({
-            where: { id: existingUser.id },
-            data: {
-              passwordHash: existingUser.passwordHash || passwordHash,
-              supabaseUserId,
-              authProvider: existingUser.authProvider,
-              normalizedEmail: email,
-              candidateProfiles: {
-                create: candidateProfileData,
-              },
-            },
-            include: { candidateProfiles: { orderBy: { createdAt: 'desc' }, take: 1 } },
-          })
-        : await prisma.user.create({
-            data: {
-              email,
-              normalizedEmail: email,
-              passwordHash,
-              supabaseUserId: createdSupabaseUserId,
-              authProvider: AuthProvider.LOCAL,
-              candidateProfiles: {
-                create: candidateProfileData,
-              },
-            },
-            include: { candidateProfiles: { orderBy: { createdAt: 'desc' }, take: 1 } },
-          });
-      createdLocalUser = !existingUser;
+      let registeredEmail = email;
 
-      candidateId = user.candidateProfiles[0]!.id;
+      if (pendingInviteProfile) {
+        const updated = await prisma.user.update({
+          where: { id: existingUser!.id },
+          data: {
+            passwordHash,
+            supabaseUserId,
+            authProvider: existingUser!.authProvider,
+            normalizedEmail: email,
+            candidateProfiles: {
+              update: {
+                where: { id: pendingInviteProfile.id },
+                data: {
+                  fullName: candidateProfileData.fullName,
+                  phone: candidateProfileData.phone,
+                  countryCode: candidateProfileData.countryCode,
+                  phoneNumber: candidateProfileData.phoneNumber,
+                  fullPhone: candidateProfileData.fullPhone,
+                  phoneCountry: candidateProfileData.phoneCountry,
+                  phoneCountryIso: candidateProfileData.phoneCountryIso,
+                  experienceCategory: candidateProfileData.experienceCategory,
+                  yearsOfExperience: candidateProfileData.yearsOfExperience,
+                  linkedinUrl: candidateProfileData.linkedinUrl,
+                  resumePath: candidateProfileData.resumePath,
+                  referralCode: candidateProfileData.referralCode,
+                  lastActivityAt: now,
+                  lastActivityType: CandidateActivityType.REGISTERED,
+                  resumes: candidateProfileData.resumes,
+                  activities: candidateProfileData.activities,
+                },
+              },
+            },
+          },
+          include: { candidateProfiles: { where: { id: pendingInviteProfile.id } } },
+        });
+        candidateId = updated.candidateProfiles[0]!.id;
+        registeredEmail = updated.email;
+        createdLocalUser = false;
+      } else {
+        const user = existingUser
+          ? await prisma.user.update({
+              where: { id: existingUser.id },
+              data: {
+                passwordHash: existingUser.passwordHash || passwordHash,
+                supabaseUserId,
+                authProvider: existingUser.authProvider,
+                normalizedEmail: email,
+                candidateProfiles: {
+                  create: candidateProfileData,
+                },
+              },
+              include: { candidateProfiles: { orderBy: { createdAt: 'desc' }, take: 1 } },
+            })
+          : await prisma.user.create({
+              data: {
+                email,
+                normalizedEmail: email,
+                passwordHash,
+                supabaseUserId: createdSupabaseUserId,
+                authProvider: AuthProvider.LOCAL,
+                candidateProfiles: {
+                  create: candidateProfileData,
+                },
+              },
+              include: { candidateProfiles: { orderBy: { createdAt: 'desc' }, take: 1 } },
+            });
+        createdLocalUser = !existingUser;
+        candidateId = user.candidateProfiles[0]!.id;
+        registeredEmail = user.email;
+      }
 
       const { jti } = await assessmentTokenService.createToken(
         candidateId,
@@ -305,7 +365,7 @@ export class RegistrationService {
       return {
         candidateId,
         candidateName: data.fullName.trim(),
-        email: user.email,
+        email: registeredEmail,
       };
     } catch (error) {
       if (candidateId) {

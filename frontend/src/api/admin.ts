@@ -159,6 +159,48 @@ export async function createManualCandidate(
   return data as import('../types/candidate-management').ManualCreateResult;
 }
 
+export type RegistrationInviteTemplate = {
+  id: string;
+  name: string;
+  subject: string;
+  bodyHtml: string;
+};
+
+export async function getRegistrationInviteTemplate() {
+  const { data } = await api.get('/admin/candidates/registration-invite-template');
+  return data.data as RegistrationInviteTemplate;
+}
+
+export async function previewRegistrationInvite(payload: {
+  candidateName?: string;
+  assignedRole?: string;
+  email?: string;
+  registrationUrl?: string;
+  subject?: string;
+  bodyHtml?: string;
+}) {
+  const { data } = await api.post('/admin/candidates/registration-invite/preview', payload);
+  return data.data as { subject: string; bodyHtml: string };
+}
+
+export async function inviteCandidate(
+  payload: {
+    fullName: string;
+    email: string;
+    jobRoleId: string;
+    subject?: string;
+    bodyHtml?: string;
+    allowDuplicateOverride?: boolean;
+    duplicateOverrideReason?: string;
+  },
+  idempotencyKey: string
+) {
+  const { data } = await api.post('/admin/candidates/invite', payload, {
+    headers: { 'Idempotency-Key': idempotencyKey },
+  });
+  return data as import('../types/candidate-management').ManualCreateResult;
+}
+
 export async function bulkChangeStatus(selection: SelectionPayload, newStatus: string) {
   const { data } = await api.post('/admin/candidates/bulk/status', { selection, newStatus });
   return data as BulkResult;

@@ -19,6 +19,9 @@ import {
   listOwners,
   globalSearch,
   checkDuplicateCandidate,
+  getRegistrationInviteTemplate,
+  previewRegistrationInvite,
+  inviteCandidate,
   createCandidate,
   downloadCandidateResume,
   downloadResume,
@@ -155,6 +158,17 @@ router.get('/countries', requirePermission(Permission.VIEW_CANDIDATES), getCount
 router.get('/search', requirePermission(Permission.VIEW_CANDIDATES), globalSearch);
 router.get('/candidate-owners', requirePermission(Permission.VIEW_CANDIDATES), listOwners);
 router.get('/candidates/duplicate-check', requirePermission(Permission.MANAGE_CANDIDATES), checkDuplicateCandidate);
+router.get(
+  '/candidates/registration-invite-template',
+  requirePermission(Permission.MANAGE_CANDIDATES),
+  getRegistrationInviteTemplate
+);
+router.post(
+  '/candidates/registration-invite/preview',
+  requirePermission(Permission.MANAGE_CANDIDATES),
+  previewRegistrationInvite
+);
+router.post('/candidates/invite', requirePermission(Permission.MANAGE_CANDIDATES), inviteCandidate);
 router.post(
   '/candidates',
   requirePermission(Permission.MANAGE_CANDIDATES),

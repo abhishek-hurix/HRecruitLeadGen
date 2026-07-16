@@ -798,7 +798,7 @@ export function CandidatesPage() {
               to="/admin/candidates/new"
               className="btn-primary flex items-center justify-center gap-2 text-sm whitespace-nowrap"
             >
-              <UserPlus size={16} /> Add Candidate
+              <UserPlus size={16} /> Invite Candidate
             </Link>
           )}
         </div>

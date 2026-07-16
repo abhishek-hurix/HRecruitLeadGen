@@ -351,7 +351,9 @@ export function CandidateDashboardPage() {
     : data.appliedPosition
       ? [data.appliedPosition]
       : [];
+  const assignedRole = data.appliedPosition;
   const availableRoles = roles.filter((role) => (
+    assignedRole?.roleId !== role.id &&
     !completedRoleIds.has(role.id) &&
     !completedRoleNames.has(role.title.trim().toLowerCase())
   ));
@@ -383,6 +385,85 @@ export function CandidateDashboardPage() {
             <AlertCircle className="shrink-0 mt-0.5" size={18} />
             <span>{actionError}</span>
           </div>
+        )}
+
+        {assignedRole && !hasSubmittedAssessment && (
+          <section className="card-premium border-hurix-blue/20 bg-gradient-to-br from-hurix-blue/5 to-white">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-3">
+                <p className="text-xs font-bold uppercase tracking-[0.22em] text-hurix-blue">
+                  Your assigned role
+                </p>
+                <div>
+                  <h2 className="text-2xl font-bold text-hurix-charcoal">{assignedRole.roleName}</h2>
+                  <p className="mt-1 text-sm text-hurix-gray">
+                    This role was selected for you. Complete email verification, then start your assessment below.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-4 text-sm text-hurix-gray">
+                  {assignedRole.country && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <MapPin size={14} className="text-hurix-blue" />
+                      {assignedRole.country}
+                    </span>
+                  )}
+                  {assignedRole.compensation && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <DollarSign size={14} className="text-hurix-blue" />
+                      {assignedRole.compensation}
+                    </span>
+                  )}
+                </div>
+                {assignedRole.skills.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {assignedRole.skills.slice(0, 6).map((skill) => (
+                      <span
+                        key={skill}
+                        className="rounded-full bg-hurix-blue/10 px-2.5 py-1 text-[11px] font-medium text-hurix-blue"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="shrink-0">
+                {mobileBlocked ? (
+                  <div className="max-w-sm rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Use a laptop or desktop to start the assessment.
+                  </div>
+                ) : !verified ? (
+                  <p className="max-w-sm text-sm text-hurix-gray">
+                    Verify your email first using the resend button in your profile section.
+                  </p>
+                ) : assignedRole.roleId ? (
+                  <button
+                    type="button"
+                    onClick={() => handleGiveAssessment(assignedRole.roleId!)}
+                    disabled={startingRoleId !== null}
+                    className="btn-primary flex min-w-[200px] items-center justify-center gap-2 px-6 py-3"
+                  >
+                    {startingRoleId === assignedRole.roleId ? (
+                      <Loader2 className="animate-spin" size={18} />
+                    ) : (
+                      <Play size={18} />
+                    )}
+                    {data.assessment.hasInProgress ? 'Continue Assessment' : 'Start Assessment'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleStartAssessment}
+                    disabled={starting}
+                    className="btn-primary flex min-w-[200px] items-center justify-center gap-2 px-6 py-3"
+                  >
+                    {starting ? <Loader2 className="animate-spin" size={18} /> : <Play size={18} />}
+                    {data.assessment.hasInProgress ? 'Continue Assessment' : 'Start Assessment'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
         )}
 
         <div className="grid lg:grid-cols-3 gap-6">
