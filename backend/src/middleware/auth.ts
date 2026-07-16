@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AdminRole, TokenStatus } from '@prisma/client';
+import { AdminRole, CandidateCreationSource, TokenStatus } from '@prisma/client';
 import { verifyAssessmentToken, verifyCandidatePortalToken, verifyAdminToken } from '../utils/jwt';
 import { prisma } from '../config/database';
 import { AppError } from '../utils/errors';
@@ -56,7 +56,11 @@ export async function authenticateAssessment(req: AuthRequest, _res: Response, n
       }
     }
 
-    if (!tokenRecord.candidate.emailVerified) {
+    // Admin-created candidates are trusted (admin emails them the link directly),
+    // so they don't need the separate email-verification step.
+    const isAdminCreated =
+      tokenRecord.candidate.creationSource === CandidateCreationSource.ADMIN_CREATED;
+    if (!tokenRecord.candidate.emailVerified && !isAdminCreated) {
       throw new AppError(401, 'Email verification required. Please use your assessment link.');
     }
 

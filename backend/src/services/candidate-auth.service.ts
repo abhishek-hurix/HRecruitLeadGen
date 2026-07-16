@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
-import { AuthProvider } from '@prisma/client';
+import { AuthProvider, CandidateCreationSource } from '@prisma/client';
 import { prisma } from '../config/database';
 import { config } from '../config';
 import { AppError } from '../utils/errors';
@@ -175,7 +175,8 @@ export class CandidateAuthService {
     });
 
     if (!candidate) throw new AppError(404, 'Candidate not found');
-    if (!candidate.emailVerified) {
+    const isAdminCreated = candidate.creationSource === CandidateCreationSource.ADMIN_CREATED;
+    if (!candidate.emailVerified && !isAdminCreated) {
       throw new AppError(403, 'Please verify your email before starting the assessment.');
     }
 

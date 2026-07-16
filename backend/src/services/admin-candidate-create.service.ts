@@ -262,6 +262,10 @@ async function createManualCandidateCore(params: {
         experienceCategory,
         yearsOfExperience: getExperienceYears(experienceCategory),
         linkedinUrl: linkedinUrl || '',
+        // Admin creates and emails the candidate directly, so the address is trusted.
+        // This lets the assessment link (and portal login) work without a separate verify step.
+        emailVerified: true,
+        emailVerifiedAt: now,
         resumePath: uploadedPath || '',
         appliedRole: jobRole.title,
         selectedRole: { connect: { id: jobRole.id } },

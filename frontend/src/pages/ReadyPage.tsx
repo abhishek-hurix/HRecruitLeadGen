@@ -5,7 +5,7 @@ import { Header } from '../components/layout/Header';
 import { MobileAssessmentBlocker } from '../components/assessment/MobileAssessmentBlocker';
 import { isMobilePhone } from '../utils/device';
 import { useAssessmentToken } from '../hooks/useAssessmentToken';
-import { initSessionAuth, getReadyInfo } from '../api/assessment';
+import { initSessionAuth, getReadyInfo, startAssessment } from '../api/assessment';
 import { getApiErrorMessage, isLinkExpiredError } from '../utils/apiErrors';
 
 export function ReadyPage() {
@@ -26,15 +26,24 @@ export function ReadyPage() {
     }
     initSessionAuth(token);
     getReadyInfo()
-      .then((data) => {
+      .then(async (data) => {
         setCandidateName(data.candidateName);
         setHasCompleted(data.hasCompleted);
         setHasRoleSelected(data.hasRoleSelected);
         setQuestionCount(data.questionCount);
         setDurationMinutes(data.durationMinutes);
-        if (data.hasInProgress && !data.hasCompleted) {
+
+        if (data.hasCompleted) return;
+
+        if (data.hasInProgress) {
           navigate(`/assessment?token=${encodeURIComponent(token!)}`);
-        } else if (data.hasRoleSelected && !data.hasCompleted) {
+          return;
+        }
+
+        // Role already chosen (e.g. admin-created candidate) but no active session yet:
+        // start it here so the assessment opens directly instead of bouncing back to /ready.
+        if (data.hasRoleSelected) {
+          await startAssessment();
           navigate(`/assessment?token=${encodeURIComponent(token!)}`);
         }
       })

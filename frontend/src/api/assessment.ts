@@ -36,8 +36,8 @@ export async function selectRoleAndStart(jobRoleId: string) {
   return data as AssessmentSession & { token?: string };
 }
 
-export async function startAssessment(language: Language) {
-  const { data } = await api.post('/assessment/start', { language });
+export async function startAssessment(language?: Language) {
+  const { data } = await api.post('/assessment/start', language ? { language } : {});
   return data as AssessmentSession;
 }
 
