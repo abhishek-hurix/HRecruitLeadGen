@@ -26,8 +26,11 @@ import { activeCandidateWhere, mergeCandidateWhere } from '../utils/candidate-sc
 import { logger } from '../utils/logger';
 import { config } from '../config';
 import { reminderService } from './reminder.service';
+import { formatPersonName, personNamesMatch } from '../utils/person-name';
 
 const MAX_TEXT = 200;
+const NAME_MISMATCH_MESSAGE =
+  'This email is already registered with a different name. The same email must always use the same candidate name.';
 const MAX_LONG = 2000;
 
 export interface ManualCandidateInput {
@@ -90,6 +93,38 @@ function safeExistingSummary(profile: {
     assignedRole: profile.selectedRoleName,
     registeredAt: profile.createdAt,
   };
+}
+
+export async function getCanonicalNameForEmail(email: string): Promise<string | null> {
+  const normalized = normalizeEmail(email);
+  const user = await prisma.user.findFirst({
+    where: { OR: [{ email: normalized }, { normalizedEmail: normalized }] },
+    include: {
+      candidateProfiles: {
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'asc' },
+        select: { fullName: true, resumePath: true },
+      },
+    },
+  });
+  if (!user?.candidateProfiles.length) return null;
+  const withResume = user.candidateProfiles.find((profile) => profile.resumePath);
+  const source = withResume || user.candidateProfiles[0];
+  return formatPersonName(source.fullName);
+}
+
+function resolveFormattedPersonName(rawName: unknown, field = 'fullName'): string {
+  const sanitized = sanitizeText(rawName, field, 120);
+  if (!sanitized || sanitized.length < 2) throw new AppError(400, 'Full name is required');
+  return formatPersonName(sanitized);
+}
+
+function assertEmailNameAllowed(email: string, proposedName: string, canonicalName: string | null) {
+  if (!canonicalName || personNamesMatch(proposedName, canonicalName)) return;
+  throw new AppError(409, NAME_MISMATCH_MESSAGE, undefined, {
+    canonicalName,
+    nameMismatch: true,
+  });
 }
 
 export async function findActiveDuplicateByEmail(email: string) {
@@ -157,11 +192,12 @@ async function createManualCandidateCore(params: {
 }) {
   const { input, adminUserId, adminRole } = params;
 
-  const fullName = sanitizeText(input.fullName, 'fullName', 120);
-  if (!fullName || fullName.length < 2) throw new AppError(400, 'Full name is required');
+  const fullName = resolveFormattedPersonName(input.fullName);
 
   if (!isValidEmail(input.email || '')) throw new AppError(400, 'Invalid email format');
   const email = normalizeEmail(input.email);
+  const canonicalName = await getCanonicalNameForEmail(email);
+  assertEmailNameAllowed(email, fullName, canonicalName);
 
   const iso = resolveCountryIso(input.phoneCountryIso);
   if (!iso) throw new AppError(400, 'Invalid country code');
@@ -454,12 +490,19 @@ async function createManualCandidateCore(params: {
   }
 }
 
-export async function checkCandidateDuplicate(email: string) {
+export async function checkCandidateDuplicate(email: string, proposedName?: string) {
   if (!isValidEmail(email || '')) throw new AppError(400, 'Invalid email format');
   const existing = await findActiveDuplicateByEmail(email);
+  const canonicalName = await getCanonicalNameForEmail(email);
+  const formattedProposed = proposedName ? formatPersonName(proposedName) : null;
+  const nameMismatch = Boolean(
+    canonicalName && formattedProposed && !personNamesMatch(formattedProposed, canonicalName)
+  );
   return {
     duplicate: Boolean(existing),
     existing: existing ? safeExistingSummary(existing) : null,
+    canonicalName,
+    nameMismatch,
   };
 }
 
@@ -504,11 +547,12 @@ async function createInviteCandidateCore(params: {
 }) {
   const { input, adminUserId, adminRole } = params;
 
-  const fullName = sanitizeText(input.fullName, 'fullName', 120);
-  if (!fullName || fullName.length < 2) throw new AppError(400, 'Full name is required');
+  const fullName = resolveFormattedPersonName(input.fullName);
 
   if (!isValidEmail(input.email || '')) throw new AppError(400, 'Invalid email format');
   const email = normalizeEmail(input.email);
+  const canonicalName = await getCanonicalNameForEmail(email);
+  assertEmailNameAllowed(email, fullName, canonicalName);
 
   if (!input.jobRoleId) throw new AppError(400, 'Job role is required');
   const jobRole = await prisma.jobRole.findUnique({ where: { id: input.jobRoleId } });

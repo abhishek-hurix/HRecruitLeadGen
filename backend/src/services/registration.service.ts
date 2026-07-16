@@ -20,6 +20,8 @@ import { getExperienceYears, parseExperienceCategory } from '../utils/experience
 import { applicationIdFromUuid, normalizeEmail } from '../utils/application-id';
 import { logger } from '../utils/logger';
 import { supabaseAuthService } from './supabase-auth.service';
+import { formatPersonName, personNamesMatch } from '../utils/person-name';
+import { getCanonicalNameForEmail } from './admin-candidate-create.service';
 
 const DEFAULT_APPLIED_ROLE = 'General Application';
 
@@ -156,12 +158,22 @@ export class RegistrationService {
     if (data.fullName.trim().length < 2) {
       throw new AppError(400, 'Full name is required');
     }
+    const fullName = formatPersonName(data.fullName);
     if (!data.password || data.password.length < 8) {
       throw new AppError(400, 'Password must be at least 8 characters');
     }
 
     const email = normalizeEmail(data.email);
     const appliedRole = data.appliedRole?.trim() || DEFAULT_APPLIED_ROLE;
+    const canonicalName = await getCanonicalNameForEmail(email);
+    if (canonicalName && !personNamesMatch(fullName, canonicalName)) {
+      throw new AppError(
+        409,
+        'This email is already registered with a different name. Please use the same name for this email.',
+        undefined,
+        { canonicalName, nameMismatch: true }
+      );
+    }
 
     const existingUser = await prisma.user.findFirst({
       where: {
@@ -231,7 +243,7 @@ export class RegistrationService {
       const candidateProfileData = {
         id: profileId,
         applicationId: pendingInviteProfile?.applicationId || applicationIdFromUuid(profileId),
-        fullName: data.fullName.trim(),
+        fullName,
         phone: parsedPhone.phoneNumber,
         countryCode: parsedPhone.countryCode,
         phoneNumber: parsedPhone.phoneNumber,
@@ -251,7 +263,7 @@ export class RegistrationService {
         lastActivityType: CandidateActivityType.REGISTERED,
         resumes: {
           create: {
-            fileName: resumeFile.originalname || `${data.fullName.trim().replace(/\s+/g, '_')}_resume.pdf`,
+            fileName: resumeFile.originalname || `${fullName.replace(/\s+/g, '_')}_resume.pdf`,
             filePath: resumePath,
             storagePath: resumePath,
             mimeType: resumeFile.mimetype || 'application/pdf',
@@ -352,7 +364,7 @@ export class RegistrationService {
       await emailVerificationService.sendInitialVerificationEmail(
         candidateId,
         email,
-        data.fullName.trim()
+        fullName
       );
 
       await assessmentTokenService.markEmailSent(jti);
@@ -364,7 +376,7 @@ export class RegistrationService {
 
       return {
         candidateId,
-        candidateName: data.fullName.trim(),
+        candidateName: fullName,
         email: registeredEmail,
       };
     } catch (error) {

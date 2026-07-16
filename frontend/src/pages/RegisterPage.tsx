@@ -13,6 +13,7 @@ import { parseResume, registerCandidate } from '../api/registration';
 import { getVisitorId } from '../utils/visitor';
 import { isValidEmail, isValidLinkedIn, isPdfFile } from '../utils/validation';
 import { EXPERIENCE_OPTIONS } from '../utils/experience';
+import { formatPersonName } from '../utils/personName';
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -82,7 +83,9 @@ export function RegisterPage() {
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (form.fullName.trim().length < 2) e.fullName = 'Full name is required';
+    const formattedName = formatPersonName(form.fullName);
+    setForm((current) => ({ ...current, fullName: formattedName }));
+    if (formattedName.length < 2) e.fullName = 'Full name is required';
     if (!isValidEmail(form.email)) e.email = 'Valid email required';
     if (!isValidNationalPhone(countryIso, phoneNumber)) {
       e.phone = 'Valid phone number required for selected country';
@@ -109,7 +112,7 @@ export function RegisterPage() {
 
     try {
       const fd = new FormData();
-      fd.append('fullName', form.fullName);
+      fd.append('fullName', formatPersonName(form.fullName));
       fd.append('email', form.email);
       fd.append('phoneCountryIso', countryIso);
       fd.append('phoneNumber', phoneNumber.replace(/\D/g, ''));
@@ -208,6 +211,9 @@ export function RegisterPage() {
                 className="input-field"
                 value={form.fullName}
                 onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+                onBlur={() =>
+                  setForm((current) => ({ ...current, fullName: formatPersonName(current.fullName) }))
+                }
                 placeholder="John Doe"
               />
               {errors.fullName && <p className="text-red-500 text-xs mt-1">{errors.fullName}</p>}

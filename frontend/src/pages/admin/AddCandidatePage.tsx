@@ -13,6 +13,7 @@ import {
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { getAdminActionErrorMessage } from '../../utils/apiErrors';
 import { htmlToPlainEmail, plainToEmailHtml } from '../../utils/emailBody';
+import { formatPersonName } from '../../utils/personName';
 import { isValidEmail } from '../../utils/validation';
 import type { DuplicateCheckResult, ManualCreateResult } from '../../types/candidate-management';
 
@@ -94,16 +95,22 @@ export function AddCandidatePage() {
 
   const validateClient = (): boolean => {
     const errors: Record<string, string> = {};
-    if (fullName.trim().length < 2) errors.fullName = 'Full name is required';
+    const formattedName = formatPersonName(fullName);
+    if (formattedName.length < 2) errors.fullName = 'Full name is required';
     if (!isValidEmail(email)) errors.email = 'Valid email required';
     if (!jobRoleId) errors.jobRoleId = 'Job role is required';
     if (!emailSubject.trim()) errors.emailSubject = 'Email subject is required';
     if (!emailBodyPlain.trim()) errors.emailBody = 'Email body is required';
+    if (duplicate?.nameMismatch) {
+      errors.fullName = `Use the registered name for this email: ${duplicate.canonicalName || duplicate.existing?.fullName}`;
+    }
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const submit = async (opts?: { allowDuplicateOverride?: boolean; reason?: string }) => {
+    const formattedName = formatPersonName(fullName);
+    setFullName(formattedName);
     if (!validateClient()) return;
     setSubmitting(true);
     setServerError(null);
@@ -111,7 +118,7 @@ export function AddCandidatePage() {
     try {
       const created = await inviteCandidate(
         {
-          fullName: fullName.trim(),
+          fullName: formattedName,
           email: email.trim(),
           jobRoleId,
           subject: emailSubject.trim(),
@@ -126,15 +133,30 @@ export function AddCandidatePage() {
       const axiosErr = err as {
         response?: {
           status?: number;
-          data?: { message?: string; existing?: DuplicateCheckResult['existing'] };
+          data?: {
+            message?: string;
+            existing?: DuplicateCheckResult['existing'];
+            canonicalName?: string;
+            nameMismatch?: boolean;
+          };
         };
       };
       if (axiosErr.response?.status === 409) {
-        setDuplicate({
-          duplicate: true,
-          existing: axiosErr.response.data?.existing || null,
-        });
-        setServerError(axiosErr.response.data?.message || 'A candidate with this email already exists');
+        const payload = axiosErr.response.data;
+        if (payload?.nameMismatch) {
+          setDuplicate({
+            duplicate: true,
+            nameMismatch: true,
+            canonicalName: payload.canonicalName || payload.existing?.fullName || null,
+            existing: payload.existing || null,
+          });
+        } else {
+          setDuplicate({
+            duplicate: true,
+            existing: payload?.existing || null,
+          });
+        }
+        setServerError(payload?.message || 'A candidate with this email already exists');
       } else {
         setServerError(getAdminActionErrorMessage(err));
       }
@@ -146,12 +168,18 @@ export function AddCandidatePage() {
   const precheckDuplicate = async () => {
     if (!isValidEmail(email)) return;
     try {
-      const check = await checkCandidateDuplicate(email.trim());
-      if (check.duplicate) setDuplicate(check);
+      const check = await checkCandidateDuplicate(email.trim(), formatPersonName(fullName));
+      if (check.duplicate || check.nameMismatch) setDuplicate(check);
       else setDuplicate(null);
     } catch {
       /* ignore preflight errors */
     }
+  };
+
+  const handleFullNameBlur = () => {
+    const formatted = formatPersonName(fullName);
+    if (formatted !== fullName) setFullName(formatted);
+    void precheckDuplicate();
   };
 
   if (result?.candidateCreated) {
@@ -214,11 +242,16 @@ export function AddCandidatePage() {
           }
         }}
       >
-        {serverError && !duplicate?.duplicate && (
+        {serverError && !duplicate?.duplicate && !duplicate?.nameMismatch && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm" role="alert">
             {serverError}
           </div>
         )}
+
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          Each email can only have one candidate name. Use the same name every time for that email.
+          Names are auto-formatted as <strong>First Last</strong> (first letter capital, rest lowercase for each part).
+        </div>
 
         <div>
           <label className="block text-sm font-medium mb-1">Full Name *</label>
@@ -233,6 +266,7 @@ export function AddCandidatePage() {
                 return next;
               });
             }}
+            onBlur={handleFullNameBlur}
             placeholder="John Doe"
           />
           {fieldErrors.fullName && <p className="text-red-500 text-xs mt-1">{fieldErrors.fullName}</p>}
@@ -280,7 +314,18 @@ export function AddCandidatePage() {
           {fieldErrors.jobRoleId && <p className="text-red-500 text-xs mt-1">{fieldErrors.jobRoleId}</p>}
         </div>
 
-        {duplicate?.duplicate && duplicate.existing && (
+        {duplicate?.nameMismatch && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 space-y-2" role="alert">
+            <p className="font-semibold">Name does not match this email</p>
+            <p>
+              This email is already registered as{' '}
+              <strong>{duplicate.canonicalName || duplicate.existing?.fullName}</strong>.
+              Please use the same name. A different name cannot be assigned, even by admin.
+            </p>
+          </div>
+        )}
+
+        {duplicate?.duplicate && duplicate.existing && !duplicate.nameMismatch && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 space-y-2" role="alert">
             <p className="font-semibold">Existing candidate found</p>
             <p>
@@ -384,6 +429,7 @@ export function AddCandidatePage() {
           disabled={
             submitting ||
             !templateLoaded ||
+            Boolean(duplicate?.nameMismatch) ||
             (Boolean(duplicate?.duplicate) &&
               !(isSuperAdmin && confirmOverride && overrideReason.trim().length >= 3))
           }

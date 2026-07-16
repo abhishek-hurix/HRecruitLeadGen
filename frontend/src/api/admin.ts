@@ -141,8 +141,10 @@ export async function globalAdminSearch(q: string) {
   return data.data as import('../types/candidate-management').GlobalSearchResult;
 }
 
-export async function checkCandidateDuplicate(email: string) {
-  const { data } = await api.get('/admin/candidates/duplicate-check', { params: { email } });
+export async function checkCandidateDuplicate(email: string, fullName?: string) {
+  const params: { email: string; fullName?: string } = { email };
+  if (fullName?.trim()) params.fullName = fullName.trim();
+  const { data } = await api.get('/admin/candidates/duplicate-check', { params });
   return data.data as import('../types/candidate-management').DuplicateCheckResult;
 }
 

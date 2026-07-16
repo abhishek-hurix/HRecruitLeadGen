@@ -154,7 +154,8 @@ export async function checkDuplicateCandidate(req: AuthRequest, res: Response, n
   try {
     const { checkCandidateDuplicate } = await import('../services/admin-candidate-create.service');
     const email = String(req.query.email ?? req.body?.email ?? '');
-    const data = await checkCandidateDuplicate(email);
+    const fullName = String(req.query.fullName ?? req.body?.fullName ?? '').trim() || undefined;
+    const data = await checkCandidateDuplicate(email, fullName);
     res.json({ success: true, data, requestId: req.requestId });
   } catch (error) {
     next(error);

@@ -313,6 +313,8 @@ export type ResumeMetadata = {
 
 export type DuplicateCheckResult = {
   duplicate: boolean;
+  canonicalName?: string | null;
+  nameMismatch?: boolean;
   existing: {
     id: string;
     applicationId: string;
