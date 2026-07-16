@@ -10,6 +10,15 @@ import { jobRoleService, parseAssessmentLanguages } from './job-role.service';
 
 const ASSESSMENT_QUESTION_COUNT = 10;
 
+async function resolveDurationMinutes(): Promise<number> {
+  const row = await prisma.platformSetting.findUnique({
+    where: { key: 'assessment_duration_minutes' },
+  });
+  const fromDb = row ? parseInt(row.value, 10) : NaN;
+  if (Number.isFinite(fromDb) && fromDb > 0) return fromDb;
+  return config.assessment.durationMinutes;
+}
+
 export class AssessmentService {
   private async getCandidate(candidateId: string) {
     const candidate = await prisma.candidateProfile.findUnique({
@@ -33,6 +42,7 @@ export class AssessmentService {
     const hasCompleted = candidate.submissions.length > 0 ||
       candidate.assessments.some((a) => a.status === AssessmentStatus.COMPLETED);
     const inProgress = candidate.assessments.some((a) => a.status === AssessmentStatus.IN_PROGRESS);
+    const durationMinutes = await resolveDurationMinutes();
 
     return {
       candidateName: candidate.fullName,
@@ -41,12 +51,53 @@ export class AssessmentService {
       hasRoleSelected: Boolean(candidate.selectedRoleId),
       selectedRoleName: candidate.selectedRoleName,
       questionCount: ASSESSMENT_QUESTION_COUNT,
-      durationMinutes: config.assessment.durationMinutes,
+      durationMinutes,
     };
   }
 
   async listJobRoles() {
     return jobRoleService.listActiveRoles();
+  }
+
+  /** Assign a role without starting the timed assessment session. */
+  async assignRole(candidateId: string, jobRoleId: string) {
+    const candidate = await prisma.candidateProfile.findUnique({
+      where: { id: candidateId },
+      include: { user: true, submissions: { include: { assessment: true } } },
+    });
+    if (!candidate) throw new AppError(404, 'Candidate not found');
+
+    const roleProfile = await prisma.candidateProfile.findFirst({
+      where: { userId: candidate.userId, selectedRoleId: jobRoleId },
+      include: { submissions: { include: { assessment: true } } },
+    });
+    const activeCandidate = roleProfile || candidate;
+    const hasCompletedRole = activeCandidate.submissions.some(
+      (submission) => submission.assessment.jobRoleId === jobRoleId
+    );
+    if (hasCompletedRole) {
+      throw new AppError(403, 'You have already completed this role assessment.');
+    }
+
+    const { role, candidateId: selectedCandidateId } =
+      candidate.selectedRoleId === jobRoleId
+        ? { role: await prisma.jobRole.findUniqueOrThrow({ where: { id: jobRoleId } }), candidateId }
+        : await jobRoleService.selectRoleForCandidate(candidateId, jobRoleId);
+
+    const result: { roleId: string; roleName: string; token?: string } = {
+      roleId: role.id,
+      roleName: role.title,
+    };
+
+    if (selectedCandidateId !== candidateId) {
+      const { token } = await assessmentTokenService.createToken(
+        selectedCandidateId,
+        candidate.user.email
+      );
+      result.token = token;
+    }
+
+    return result;
   }
 
   async selectRoleAndStart(candidateId: string, jobRoleId: string) {
@@ -131,7 +182,8 @@ export class AssessmentService {
     const questionIds = selected.map((q) => q.id);
 
     const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + config.assessment.durationMinutes);
+    const durationMinutes = await resolveDurationMinutes();
+    expiresAt.setMinutes(expiresAt.getMinutes() + durationMinutes);
 
     const assessment = await prisma.assessment.create({
       data: {

@@ -29,7 +29,7 @@ export function SettingsPage() {
   }
 
   const qc = questionCount || data?.assessment_question_count || '10';
-  const dur = duration || data?.assessment_duration_minutes || '60';
+  const dur = duration || data?.assessment_duration_minutes || '15';
 
   return (
     <AdminLayout>

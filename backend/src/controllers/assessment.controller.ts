@@ -68,6 +68,16 @@ export async function listJobRoles(_req: AuthRequest, res: Response, next: NextF
   }
 }
 
+export async function assignRole(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { jobRoleId } = req.body;
+    const result = await assessmentService.assignRole(req.candidateId!, jobRoleId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function selectRoleAndStart(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { jobRoleId } = req.body;

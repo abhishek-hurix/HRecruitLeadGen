@@ -389,7 +389,7 @@ async function createManualCandidateCore(params: {
           candidateId!,
           email
         );
-        const assessmentUrl = `${config.frontendUrl}/assessment?token=${encodeURIComponent(token)}`;
+        const assessmentUrl = `${config.frontendUrl}/ready?token=${encodeURIComponent(token)}`;
         await emailService.sendAssessmentLink({
           to: email,
           candidateName: fullName,

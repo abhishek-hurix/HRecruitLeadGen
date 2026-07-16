@@ -31,6 +31,11 @@ export async function getJobRoles() {
   }>;
 }
 
+export async function assignRole(jobRoleId: string) {
+  const { data } = await api.post('/assessment/assign-role', { jobRoleId });
+  return data as { success: boolean; roleId: string; roleName: string; token?: string };
+}
+
 export async function selectRoleAndStart(jobRoleId: string) {
   const { data } = await api.post('/assessment/select-role', { jobRoleId });
   return data as AssessmentSession & { token?: string };

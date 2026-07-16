@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle, Clock, FileText, Loader2, ArrowRight } from 'lucide-react';
+import { Briefcase, CheckCircle, Clock, FileText, Loader2, ArrowRight } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { MobileAssessmentBlocker } from '../components/assessment/MobileAssessmentBlocker';
 import { isMobilePhone } from '../utils/device';
@@ -12,11 +12,14 @@ export function ReadyPage() {
   const token = useAssessmentToken();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
   const [candidateName, setCandidateName] = useState('');
   const [hasCompleted, setHasCompleted] = useState(false);
+  const [hasInProgress, setHasInProgress] = useState(false);
   const [hasRoleSelected, setHasRoleSelected] = useState(false);
+  const [selectedRoleName, setSelectedRoleName] = useState<string | null>(null);
   const [questionCount, setQuestionCount] = useState(10);
-  const [durationMinutes, setDurationMinutes] = useState(60);
+  const [durationMinutes, setDurationMinutes] = useState(15);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -26,26 +29,14 @@ export function ReadyPage() {
     }
     initSessionAuth(token);
     getReadyInfo()
-      .then(async (data) => {
+      .then((data) => {
         setCandidateName(data.candidateName);
         setHasCompleted(data.hasCompleted);
+        setHasInProgress(data.hasInProgress);
         setHasRoleSelected(data.hasRoleSelected);
+        setSelectedRoleName(data.selectedRoleName);
         setQuestionCount(data.questionCount);
         setDurationMinutes(data.durationMinutes);
-
-        if (data.hasCompleted) return;
-
-        if (data.hasInProgress) {
-          navigate(`/assessment?token=${encodeURIComponent(token!)}`);
-          return;
-        }
-
-        // Role already chosen (e.g. admin-created candidate) but no active session yet:
-        // start it here so the assessment opens directly instead of bouncing back to /ready.
-        if (data.hasRoleSelected) {
-          await startAssessment();
-          navigate(`/assessment?token=${encodeURIComponent(token!)}`);
-        }
       })
       .catch((err) => {
         if (isLinkExpiredError(err)) {
@@ -57,9 +48,34 @@ export function ReadyPage() {
       .finally(() => setLoading(false));
   }, [token, navigate]);
 
-  const handleContinue = () => {
+  const handleSelectRole = () => {
     if (!token) return;
     navigate(`/select-role?token=${encodeURIComponent(token)}`);
+  };
+
+  const handleStartAssessment = async () => {
+    if (!token) return;
+    setStarting(true);
+    setError('');
+    try {
+      if (hasInProgress) {
+        navigate(`/assessment?token=${encodeURIComponent(token)}`);
+        return;
+      }
+      if (!hasRoleSelected) {
+        navigate(`/select-role?token=${encodeURIComponent(token)}`);
+        return;
+      }
+      await startAssessment();
+      navigate(`/assessment?token=${encodeURIComponent(token)}`);
+    } catch (err) {
+      if (isLinkExpiredError(err)) {
+        navigate('/expired');
+        return;
+      }
+      setError(getApiErrorMessage(err, 'Failed to start assessment.'));
+      setStarting(false);
+    }
   };
 
   if (loading) {
@@ -75,12 +91,12 @@ export function ReadyPage() {
   }
 
   const instructions = [
-    'Stable internet connection',
-    'Do not refresh page',
-    'Copy/Paste disabled',
-    'One attempt only',
-    'One position selection only — cannot be changed',
-    'Assessment cannot be resumed after submission',
+    `You have ${durationMinutes} minutes to complete the assessment`,
+    `${questionCount} multiple-choice questions`,
+    'Use a stable internet connection',
+    'Do not refresh or close the browser during the test',
+    'One attempt only — submission cannot be undone',
+    'The timer starts only when you click Start Assessment',
   ];
 
   if (hasCompleted) {
@@ -111,7 +127,7 @@ export function ReadyPage() {
             Welcome, {candidateName}
           </h1>
           <p className="text-hurix-gray mb-8">
-            You are ready to begin. Next, select the position you are applying for.
+            Please review the instructions below. The timer will start only after you begin.
           </p>
 
           {error && (
@@ -120,7 +136,14 @@ export function ReadyPage() {
             </div>
           )}
 
-          <div className="grid sm:grid-cols-2 gap-4 mb-8">
+          <div className="grid sm:grid-cols-3 gap-4 mb-8">
+            <div className="bg-slate-50 rounded-xl p-4 text-center">
+              <Briefcase className="mx-auto text-hurix-blue mb-2" size={24} />
+              <p className="text-xs text-hurix-gray">Role</p>
+              <p className="font-semibold text-sm">
+                {selectedRoleName || (hasRoleSelected ? 'Assigned' : 'Not selected')}
+              </p>
+            </div>
             <div className="bg-slate-50 rounded-xl p-4 text-center">
               <FileText className="mx-auto text-hurix-blue mb-2" size={24} />
               <p className="text-xs text-hurix-gray">Questions</p>
@@ -145,9 +168,26 @@ export function ReadyPage() {
             </ul>
           </div>
 
-          {!hasRoleSelected && (
+          {hasRoleSelected || hasInProgress ? (
             <button
-              onClick={handleContinue}
+              type="button"
+              onClick={handleStartAssessment}
+              disabled={starting}
+              className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {starting ? (
+                <Loader2 className="animate-spin" size={20} />
+              ) : (
+                <>
+                  {hasInProgress ? 'Continue Assessment' : 'Start Assessment'}
+                  <ArrowRight size={20} />
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSelectRole}
               className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2"
             >
               Select Job Role

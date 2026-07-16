@@ -10,6 +10,7 @@ import {
   submitAssessment,
   getThankYou,
   listJobRoles,
+  assignRole,
   selectRoleAndStart,
 } from '../controllers/assessment.controller';
 
@@ -38,6 +39,7 @@ const submitSchema = z.object({
 
 router.get('/ready', authenticateAssessment, getReady);
 router.get('/job-roles', authenticateAssessment, listJobRoles);
+router.post('/assign-role', authenticateAssessment, validateBody(selectRoleSchema), assignRole);
 router.post('/select-role', authenticateAssessment, validateBody(selectRoleSchema), selectRoleAndStart);
 router.post('/start', authenticateAssessment, validateBody(startSchema), startAssessment);
 router.get('/session', authenticateAssessment, getSession);

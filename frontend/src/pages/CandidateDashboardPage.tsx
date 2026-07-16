@@ -33,7 +33,7 @@ import {
   updateCandidatePhone,
   uploadCandidateResume,
 } from '../api/candidate';
-import { initSessionAuth, selectRoleAndStart } from '../api/assessment';
+import { initSessionAuth, assignRole } from '../api/assessment';
 import { clearCandidateToken, getCandidateToken, setCandidateToken } from '../api/client';
 import { getApiErrorMessage, isLinkExpiredError, getApiErrorStatus } from '../utils/apiErrors';
 import { getCountryNameFromDialCode, getPhoneSaveValidationError, splitProfilePhone } from '../utils/countries';
@@ -197,13 +197,8 @@ export function CandidateDashboardPage() {
     setActionError('');
     try {
       const { token } = await getAssessmentAccessToken();
-      if (data?.assessment.hasInProgress) {
-        navigate(`/assessment?token=${encodeURIComponent(token)}`);
-      } else if (!data?.appliedPosition) {
-        navigate(`/ready?token=${encodeURIComponent(token)}`);
-      } else {
-        navigate(`/ready?token=${encodeURIComponent(token)}`);
-      }
+      // Always land on instructions first; timer starts only from Ready page.
+      navigate(`/ready?token=${encodeURIComponent(token)}`);
     } catch (err) {
       setActionError(getApiErrorMessage(err));
     } finally {
@@ -219,13 +214,13 @@ export function CandidateDashboardPage() {
     try {
       const { token } = await getAssessmentAccessToken();
       initSessionAuth(token);
-      const session = await selectRoleAndStart(roleId);
-      const assessmentToken = session.token || token;
+      const result = await assignRole(roleId);
+      const assessmentToken = result.token || token;
       if (candidateToken) setCandidateToken(candidateToken);
-      navigate(`/assessment?token=${encodeURIComponent(assessmentToken)}`);
+      navigate(`/ready?token=${encodeURIComponent(assessmentToken)}`);
     } catch (err) {
       if (candidateToken) setCandidateToken(candidateToken);
-      setActionError(getApiErrorMessage(err, 'Failed to start assessment.'));
+      setActionError(getApiErrorMessage(err, 'Failed to open assessment.'));
     } finally {
       setStartingRoleId(null);
     }

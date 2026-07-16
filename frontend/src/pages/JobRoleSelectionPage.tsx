@@ -5,7 +5,7 @@ import { Header } from '../components/layout/Header';
 import { MobileAssessmentBlocker } from '../components/assessment/MobileAssessmentBlocker';
 import { isMobilePhone } from '../utils/device';
 import { useAssessmentToken } from '../hooks/useAssessmentToken';
-import { initSessionAuth, getJobRoles, selectRoleAndStart } from '../api/assessment';
+import { initSessionAuth, getJobRoles, assignRole } from '../api/assessment';
 import { getApiErrorMessage, isLinkExpiredError } from '../utils/apiErrors';
 
 interface JobRoleCard {
@@ -46,14 +46,15 @@ export function JobRoleSelectionPage() {
     setStartingId(roleId);
     setError('');
     try {
-      await selectRoleAndStart(roleId);
-      navigate(`/assessment?token=${encodeURIComponent(token)}`);
+      const result = await assignRole(roleId);
+      const nextToken = result.token || token;
+      navigate(`/ready?token=${encodeURIComponent(nextToken)}`);
     } catch (err) {
       if (isLinkExpiredError(err)) {
         navigate('/expired');
         return;
       }
-      setError(getApiErrorMessage(err, 'Failed to start assessment.'));
+      setError(getApiErrorMessage(err, 'Failed to select role.'));
       setStartingId(null);
     }
   };
@@ -144,7 +145,7 @@ export function JobRoleSelectionPage() {
                   {startingId === role.id ? (
                     <Loader2 className="animate-spin mx-auto" size={20} />
                   ) : (
-                    'Apply & Start Assessment'
+                    'Select & Continue'
                   )}
                 </button>
               </article>
